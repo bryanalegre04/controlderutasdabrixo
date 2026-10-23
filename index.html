@@ -1460,6 +1460,10 @@ async function leerArchivo(file, tipo) {
     return r0 ? [r0] : [];
   }
   var buf = await file.arrayBuffer();
+  // «.xls» exportado como tabla HTML: se lee como texto para que las fechas no se corran un día por la zona horaria
+  var cab = new Uint8Array(buf.slice(0, 400)), esHtml = false;
+  try { esHtml = /^\s*(<!doctype html|<html|<table|<\?xml)/i.test(new TextDecoder('utf-8').decode(cab).replace(/^\uFEFF/, '')); } catch (e) {}
+  var opcLectura = esHtml ? { raw: true } : { cellDates: false };
   var nombres = XLSX.read(buf, { type: 'array', bookSheets: true }).SheetNames
     .filter(function (n) { return normalizarClave(n) !== 'LANGUAGES'; });
   var todasLasPistas = [];
@@ -1470,7 +1474,7 @@ async function leerArchivo(file, tipo) {
   });
   var halladas = {}, lista = [];
   function leerHojas(lista_nombres) {
-    var wb = XLSX.read(buf, { type: 'array', sheets: lista_nombres, cellDates: false });
+    var wb = XLSX.read(buf, Object.assign({ type: 'array', sheets: lista_nombres }, opcLectura));
     lista_nombres.forEach(function (n) {
       var ws = wb.Sheets[n];
       if (!ws) return;
