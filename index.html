@@ -405,6 +405,11 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
 
 .etq-v { display: inline-block; min-width: 26px; text-align: center; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-family: var(--f-head); font-weight: 600; font-size: 13px; }
 
+.btn-ic { font: inherit; font-size: 11.5px; padding: 3px 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; cursor: pointer; margin-left: 4px; }
+.btn-ic:hover { background: var(--surface-2); }
+.btn-ic.mal { color: #b3261e; border-color: #e5b9b5; }
+.acc-fila { white-space: nowrap; text-align: right; }
+
 </style>
 </head>
 <body>
@@ -714,6 +719,7 @@ var state = {
   rd: [],            // Bees     (poc_external_id, status, volúmenes...)
   sic: {},           // SIC por fecha: { 'AAAA-MM-DD': { run, filas:[...] } }
   cerrados: [],      // días cerrados (no se tocan al importar)
+  ocultas: [],       // rutas ocultas: 'AAAA-MM-DD||ruta||viaje'
   cfg: { umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} },
   geo: {},
   kml: { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }
@@ -1151,8 +1157,21 @@ function construirUnificado() {
       tour: rd ? rd.tour : '', entregaCjs: hr ? hr.entregaCjs : 0
     };
   });
+  // rutas ocultas por el usuario: salen de todas las vistas (se pueden volver a mostrar)
+  ocultasDia = {};
+  if (state.ocultas && state.ocultas.length) {
+    var oc = {}; state.ocultas.forEach(function (k) { oc[k] = 1; });
+    _cacheUni = _cacheUni.filter(function (r) {
+      var k = claveOculta(r);
+      if (!oc[k]) return true;
+      ocultasDia[r.fecha] = ocultasDia[r.fecha] || {}; ocultasDia[r.fecha][k] = (ocultasDia[r.fecha][k] || 0) + 1;
+      return false;
+    });
+  }
   return _cacheUni;
 }
+var ocultasDia = {};
+function claveOculta(r) { return (r.fecha || '') + '||' + (r.ruta || '(Sin ruta)') + '||' + (r.viaje || '—'); }
 
 var METAS = { mrVolumen: 2.5, mrPedido: 9 };
 
@@ -1615,6 +1634,24 @@ function datosDia() {
   return uni;
 }
 
+function ocultarRuta(kAv) {
+  state.ocultas = state.ocultas || [];
+  var k = fechaSel + '||' + kAv;
+  if (state.ocultas.indexOf(k) === -1) state.ocultas.push(k);
+  invalidar(); guardar(); refrescar(true);
+  avisar('Ruta ' + kAv.split('||')[0] + ' oculta. Usa «Mostrar ocultas» para recuperarla.');
+}
+async function eliminarRuta(kAv) {
+  var partes = kAv.split('||'), clave = fechaSel + '||' + kAv;
+  var filas = datosDia().filter(function (r) { return claveOculta(r) === clave; });
+  var cods = {}; filas.forEach(function (r) { cods[r.codigo] = 1; });
+  var ok = await confirmar('Eliminar ruta', 'Se borrarán del programa los datos de la ruta ' + partes[0] + ' (viaje ' + partes[1] + ') del ' + formatearFecha(fechaSel) + ': ' + filas.length + ' clientes del Roadmap y de Bees. Si vuelves a importar el mismo archivo, regresarán. Si solo quieres dejar de verla, usa «Ocultar».', 'Eliminar');
+  if (!ok) return;
+  state.hr = state.hr.filter(function (r) { return !(cods[r.codigo] && (remapFechasHR[r.fecha] || r.fecha) === fechaSel); });
+  state.rd = state.rd.filter(function (r) { return !(cods[r.codigo] && r.tourDate === fechaSel); });
+  invalidar(); guardar(); refrescar(true);
+  avisar('Ruta ' + partes[0] + ' eliminada.');
+}
 function leerFiltrosAv() {
   return {
     empresa: $('faEmpresa').value, ruta: $('faRuta').value, viaje: $('faViaje').value,
@@ -1944,11 +1981,12 @@ function renderAvance() {
   var porRuta = agregarPorRuta(porRutaUni, true);
   var semPorRuta = {};
   (sifCache && sifCache.fecha === fechaSel ? sifCache.rutas : calcularSif(fechaSel).rutas).forEach(function (x) { semPorRuta[x.ruta] = x.semaforo; });
-  $('contAv').textContent = porRuta.length + ' fila' + (porRuta.length === 1 ? '' : 's') + ' (una por ruta y viaje) · clic para ver sus clientes';
+  var nOc = Object.keys(ocultasDia[fechaSel] || {}).length;
+  $('contAv').innerHTML = porRuta.length + ' fila' + (porRuta.length === 1 ? '' : 's') + ' (una por ruta y viaje) · clic para ver sus clientes' + (nOc ? ' · <button type="button" class="btn-ic" id="btnMostrarOcultas">Mostrar ' + nOc + ' oculta' + (nOc === 1 ? '' : 's') + '</button>' : '');
   var clientesPorRuta = {};
   porRutaUni.forEach(function (r) { var k = (r.ruta || '(Sin ruta)') + '||' + (r.viaje || '—'); (clientesPorRuta[k] = clientesPorRuta[k] || []).push(r); });
-  var html = '<thead><tr><th>Ruta</th><th>Viaje</th><th>SIF</th><th>Placa</th><th class="r">Clientes</th><th style="min-width:150px">Avance</th><th class="r">Entreg.</th><th class="r">Pend.</th><th class="r">Parc.</th><th class="r">Rech.</th><th class="r">Desplan.</th><th class="r">Vol. prog.</th><th class="r">Vol. entreg.</th><th class="r">Vol. rech.</th><th class="r">MR% vol.</th><th class="r">MR% ped.</th></tr></thead><tbody>';
-  if (!porRuta.length) html += '<tr><td colspan="16" class="vacio">Sin datos de avance para esta fecha.</td></tr>';
+  var html = '<thead><tr><th>Ruta</th><th>Viaje</th><th>SIF</th><th>Placa</th><th class="r">Clientes</th><th style="min-width:150px">Avance</th><th class="r">Entreg.</th><th class="r">Pend.</th><th class="r">Parc.</th><th class="r">Rech.</th><th class="r">Desplan.</th><th class="r">Vol. prog.</th><th class="r">Vol. entreg.</th><th class="r">Vol. rech.</th><th class="r">MR% vol.</th><th class="r">MR% ped.</th><th></th></tr></thead><tbody>';
+  if (!porRuta.length) html += '<tr><td colspan="17" class="vacio">Sin datos de avance para esta fecha.</td></tr>';
   porRuta.forEach(function (g) {
     var s = semPorRuta[g.ruta];
     var kAv = g.ruta + '||' + g.viaje;
@@ -1959,9 +1997,9 @@ function renderAvance() {
       '<td><div class="t-celda">' + segHtml(g) + '<span class="num">' + fmtPct(g.avancePct) + ' <span class="txt-mut">(' + g.avanzados + '/' + g.clientes + ')</span></span></div></td>' +
       '<td class="r num txt-ok">' + g.entregados + '</td><td class="r num">' + g.pendientes + '</td><td class="r num txt-warn">' + g.parciales + '</td><td class="r num txt-bad">' + g.rechazados + '</td><td class="r num txt-mut">' + g.desplanificados + '</td>' +
       '<td class="r num">' + fmtHl(g.volP) + '</td><td class="r num txt-ok">' + fmtHl(g.volE) + '</td><td class="r num txt-bad">' + fmtHl(g.volRTotal) + '</td>' +
-      '<td class="r num ' + (g.mrVolumen <= METAS.mrVolumen ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrVolumen) + '</td><td class="r num ' + (g.mrPedido <= METAS.mrPedido ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrPedido) + '</td></tr>';
+      '<td class="r num ' + (g.mrVolumen <= METAS.mrVolumen ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrVolumen) + '</td><td class="r num ' + (g.mrPedido <= METAS.mrPedido ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrPedido) + '</td><td class="acc-fila"><button type="button" class="btn-ic" data-ocultar="' + esc(kAv) + '" title="Ocultar esta ruta">Ocultar</button><button type="button" class="btn-ic mal" data-eliminar="' + esc(kAv) + '" title="Eliminar los datos de esta ruta">Eliminar</button></td></tr>';
     if (abierta) {
-      html += '<tr class="detalle-fila"><td colspan="16"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
+      html += '<tr class="detalle-fila"><td colspan="17"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
         (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + fmtHl(r.volumenRechazado) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>'; }).join('') +
         '</tbody></table></div></td></tr>';
     }
@@ -3014,6 +3052,11 @@ function wire() {
     }
     var fs = e.target.closest('tr[data-ruta]');
     if (fs && !e.target.closest('input')) { abrirRuta(fs.getAttribute('data-ruta')); return; }
+    var bo = e.target.closest('[data-ocultar]');
+    if (bo) { ocultarRuta(bo.getAttribute('data-ocultar')); return; }
+    var be = e.target.closest('[data-eliminar]');
+    if (be) { eliminarRuta(be.getAttribute('data-eliminar')); return; }
+    if (e.target.closest('#btnMostrarOcultas')) { state.ocultas = (state.ocultas || []).filter(function (k) { return k.indexOf(fechaSel + '||') !== 0; }); invalidar(); guardar(); refrescar(true); avisar('Rutas ocultas visibles otra vez.'); return; }
     var fa = e.target.closest('tr[data-av]');
     if (fa) { var k = fa.getAttribute('data-av'); expandidas[k] = !expandidas[k]; renderAvance(); return; }
   });
@@ -3075,7 +3118,7 @@ function wire() {
       if (!o || !Array.isArray(o.hr) || !Array.isArray(o.rd)) throw new Error('El archivo no es una copia de este programa.');
       var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros Roadmap, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
-      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
+      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
       state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Copia restaurada.');
     } catch (err) { avisar('No se pudo restaurar: ' + err.message, true); }
@@ -3129,7 +3172,7 @@ async function iniciar() {
   var ok = await DB.abrir();
   var g = await DB.get('estado');
   if (g && g.hr && g.rd) {
-    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
+    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
     state.cfg = Object.assign(state.cfg, g.cfg || {}); migrarCfg(g.cfg);
     state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
   }
