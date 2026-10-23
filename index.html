@@ -391,6 +391,18 @@ tr.fila-sel td { background: var(--accent-soft); }
 .track-box .mm-svg { width: auto; height: auto; min-width: 0; position: absolute; }
 .track-box .mm { background: #e8e4dc; }
 
+.mm-capas { position: absolute; top: 10px; left: 10px; display: flex; border-radius: 9px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.3); }
+.mm-capas button { border: 0; background: #fff; color: #111C27; font-size: 12.5px; font-weight: 500; padding: 7px 11px; cursor: pointer; }
+.mm-capas button + button { border-left: 1px solid #d5dbe1; }
+.mm-capas button[aria-pressed="true"] { background: #0A5CA8; color: #fff; }
+
+.tiles3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .tiles3 { grid-template-columns: 1fr; } }
+.inline-sel { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13.5px; }
+.panel-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.vacio-fila { padding: 18px; color: var(--ink-3); text-align: center; }
+tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top: 2px solid var(--line); }
+
 </style>
 </head>
 <body>
@@ -423,6 +435,12 @@ tr.fila-sel td { background: var(--accent-soft); }
         <div class="src-estado" id="est-bees">Sin datos</div>
         <button class="btn-imp" type="button" data-imp="bees">Importar Excel Bees</button>
       </div>
+      <div class="src">
+        <div class="src-top"><b>Mapas KML</b><span class="src-sub">ubicación de los clientes</span></div>
+        <div class="src-estado" id="est-kml">Sin datos</div>
+        <button class="btn-imp" type="button" data-imp="kml">Importar mapas KML / KMZ</button>
+      </div>
+      <input type="file" id="inputKml" accept=".kml,.kmz,.xml,.zip" multiple hidden>
       <input type="file" id="inputArchivo" accept=".xlsx,.xls,.xlsm,.csv,.txt" multiple hidden>
       <p class="nota-rail">Puedes subir varios días: cada importación suma y actualiza solo las fechas que trae el archivo.</p>
     </div>
@@ -462,6 +480,8 @@ tr.fila-sel td { background: var(--accent-soft); }
         <button class="btn-rail" type="button" id="btnBackup">Descargar copia (JSON)</button>
         <button class="btn-rail" type="button" id="btnRestaurar">Restaurar copia (JSON)</button>
         <input type="file" id="inputBackup" accept=".json" hidden>
+        <button class="btn-rail" type="button" id="btnBorrarBusq">Borrar ubicaciones buscadas</button>
+        <button class="btn-rail" type="button" id="btnQuitarKml">Quitar mapas KML</button>
         <button class="btn-rail" type="button" id="btnEjemplo">Ver datos de ejemplo</button>
         <button class="btn-rail peligro" type="button" id="btnVaciar">Vaciar todo</button>
         <p class="nota-rail" id="notaGuardado">Los datos se guardan en este navegador.</p>
@@ -497,6 +517,7 @@ tr.fila-sel td { background: var(--accent-soft); }
         <button class="tab" role="tab" id="tab-sif" data-vista="sif" aria-selected="true">Semáforo SIF</button>
         <button class="tab" role="tab" id="tab-avance" data-vista="avance" aria-selected="false">Avance de rutas</button>
         <button class="tab" role="tab" id="tab-mapa" data-vista="mapa" aria-selected="false">Mapa y tracking</button>
+        <button class="tab" role="tab" id="tab-pend" data-vista="pend" aria-selected="false">Pendientes y alertas</button>
         <button class="tab" role="tab" id="tab-clientes" data-vista="clientes" aria-selected="false">Detalle de clientes</button>
       </nav>
 
@@ -591,6 +612,30 @@ tr.fila-sel td { background: var(--accent-soft); }
         </div>
       </section>
 
+      <!-- ====== PENDIENTES Y ALERTAS ====== -->
+      <section id="vista-pend" class="vista" aria-labelledby="tab-pend" hidden style="flex-direction:column;gap:16px;margin-top:16px">
+        <div class="panel">
+          <div class="filtros"><select id="fpEmpresa" aria-label="Empresa"></select><select id="fpRuta" aria-label="Ruta"></select><input type="search" id="fpTexto" placeholder="Buscar código, cliente o placa" aria-label="Buscar"></div>
+          <p class="txt-mut" id="notaPend" style="margin:8px 0 0"></p>
+        </div>
+        <div class="tiles tiles3" id="tilesPend"></div>
+        <div class="panel">
+          <div class="panel-h"><div><h2>Clientes pendientes de entregar</h2><p>Volumen del Roadmap y cajas («Entrega Cjs»). No incluye los desplanificados.</p></div><span class="txt-mut" id="cntPend"></span></div>
+          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden1"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><button class="btn chico" type="button" data-exp-pend="pend">Exportar a Excel</button></div>
+          <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaPend"></table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><div><h2>Alertas del Roadmap</h2><p>Clientes con alerta registrada en el Roadmap, del mayor al menor volumen.</p></div><span class="txt-mut" id="cntAlert"></span></div>
+          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden2"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><button class="btn chico" type="button" data-exp-pend="alert">Exportar a Excel</button></div>
+          <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaAlert"></table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><div><h2>Rechazados o modificados parcialmente sin alerta</h2><p>Según Bees: rechazados o con entrega parcial que no tienen alerta en el Roadmap.</p></div><span class="txt-mut" id="cntNoAlert"></span></div>
+          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden3"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><button class="btn chico" type="button" data-exp-pend="noalert">Exportar a Excel</button></div>
+          <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaNoAlert"></table></div>
+        </div>
+      </section>
+
       <!-- ====== CLIENTES ====== -->
       <section id="vista-clientes" class="vista" aria-labelledby="tab-clientes" hidden style="flex-direction:column;gap:16px;margin-top:16px">
         <div class="panel">
@@ -666,7 +711,8 @@ var state = {
   sic: {},           // SIC por fecha: { 'AAAA-MM-DD': { run, filas:[...] } }
   cerrados: [],      // días cerrados (no se tocan al importar)
   cfg: { umbral: 10, amarillo: 9, minProy: 25, usarProy: false, manual: {}, empresas: {} },
-  geo: {}
+  geo: {},
+  kml: { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }
 };
 
 var NOMBRES_EMPRESA_BASE = {
@@ -787,7 +833,7 @@ var ALIAS_HR = {
   motivoRechazo: ['MR', 'MOTIVORECH', 'MOTIVOBEES'],
   ruta: ['RUTA'], vehiculo: ['VEHICULO'], fecha: ['FECHA'], codigo: ['CODIGO'],
   cliente: ['CLIENTE', 'CLIENTE2'], direccion: ['DIRECCION'], ciudad: ['CIUDAD'], viaje: ['VIAJE'],
-  hlProgramado: ['HLPROGRAMADO'], hlFact: ['HLFACT'], entregaCjs: ['ENTREGACJS'],
+  hlProgramado: ['HLPROGRAMADO'], hlFact: ['HLFACT'], hlEntr: ['HLENTR'], hlRech: ['HLRECH'], entregaCjs: ['ENTREGACJS'],
   cjasRechazado: ['CJASRECHAZADO'], empresa: ['EMPRESA'],
   zonaComercial: ['ZONAAC', 'ZONACOMERCIAL', 'ZONA', 'ZONAVENTAS', 'ZONAACTUAL', 'CODZONA'],
   supervisor: ['SUPERVISOR', 'SUPERVISORDEVENTAS', 'SUPERVISORVENTAS', 'SUPERVISORCOMERCIAL', 'COORDINADOR'],
@@ -814,7 +860,7 @@ function extraerRoadmap(filas) {
     var fila = filas[i] || [];
     var r = { entregado: '', alerta: '', rechazo: '', motivoRechazo: '', ruta: '', vehiculo: '', fecha: '', codigo: '',
       cliente: '', direccion: '', ciudad: '', viaje: '', hlProgramado: 0, hlFact: null, entregaCjs: 0, cjasRechazado: 0,
-      empresa: '', zonaComercial: '', supervisor: '', agente: '', transporte: '', latitud: null, longitud: null, fechaAlerta: null, retro: '' };
+      empresa: '', zonaComercial: '', supervisor: '', agente: '', transporte: '', latitud: null, longitud: null, fechaAlerta: null, retro: '', hlEntr: null, hlRech: null };
     var algo = false;
     cols.forEach(function (j) {
       var campo = mapa[j], v = fila[j];
@@ -825,6 +871,7 @@ function extraerRoadmap(filas) {
       else if (campo === 'codigo') { if (!r.codigo) r.codigo = normalizarCodigo(v); }
       else if (campo === 'hlProgramado' || campo === 'entregaCjs' || campo === 'cjasRechazado') { if (!r[campo]) r[campo] = convertirNumero(v) || 0; }
       else if (campo === 'hlFact') r.hlFact = convertirNumero(v);
+      else if (campo === 'hlEntr' || campo === 'hlRech') { var vh = convertirNumero(v); if (vh !== null && r[campo] === null) r[campo] = vh; }
       else if (campo === 'latitud' || campo === 'longitud') { var cv = convertirNumero(v); if (cv !== null && r[campo] === null) r[campo] = cv; }
       else if (campo === 'fechaAlerta') { if (r.fechaAlerta === null) r.fechaAlerta = msLima(v); }
       else if (campo === 'transporte' || campo === 'empresa' || campo === 'viaje') { if (!r[campo]) r[campo] = textoNumerico(v); }
@@ -989,12 +1036,23 @@ function construirUnificado() {
     if (!porHR[k]) porHR[k] = Object.assign({}, r);
     else {
       porHR[k].hlProgramado = (porHR[k].hlProgramado || 0) + (r.hlProgramado || 0);
+      if (r.hlEntr !== null && r.hlEntr !== undefined) porHR[k].hlEntr = (porHR[k].hlEntr || 0) + r.hlEntr;
+      if (r.hlRech !== null && r.hlRech !== undefined) porHR[k].hlRech = (porHR[k].hlRech || 0) + r.hlRech;
       if (!porHR[k].motivoRechazo && r.motivoRechazo) porHR[k].motivoRechazo = r.motivoRechazo;
     }
   });
   var porRD = {};
   state.rd.forEach(function (r) { if (r.codigo) porRD[r.codigo + '||' + (r.tourDate || '')] = r; });
 
+  // dirección y distrito del cliente: se toman de cualquier día del Roadmap (la dirección no cambia)
+  var datosCli = {};
+  Object.keys(porHR).forEach(function (k) {
+    var h = porHR[k];
+    if (h.direccion || h.ciudad) {
+      var o = datosCli[h.codigo];
+      if (!o || (h.fecha || '') > o.f) datosCli[h.codigo] = { f: h.fecha || '', d: h.direccion || '', c: h.ciudad || '', lat: h.latitud, lon: h.longitud };
+    }
+  });
   // placa -> ruta (por fecha), con lo que diga el Roadmap
   var rutaPorPlaca = {}, rutaPorPlacaUlt = {}, fechaPlacaUlt = {}, empPorPlaca = {}, empPorRuta = {}, fechaEmpPlaca = {}, fechaEmpRuta = {};
   Object.keys(porHR).forEach(function (k) {
@@ -1024,7 +1082,7 @@ function construirUnificado() {
     var empresa = (hr && hr.empresa) || '';
     if (!empresa && vehiculo) empresa = empPorPlaca[placaClave(vehiculo)] || '';
     if (!empresa && ruta) empresa = empPorRuta[ruta] || '';
-    var vp = 0, ve = 0, vr = 0, estado = 'Pendiente', motivo = '';
+    var vp = 0, ve = 0, vr = 0, estado = 'Pendiente', motivo = '', fuenteVol = rd ? 'bees' : '';
     if (rd) {
       vp = (hr && hr.hlProgramado) || (rd.volumenProgramado || 0);
       ve = rd.volumenEntregado || 0;
@@ -1034,6 +1092,9 @@ function construirUnificado() {
       else if (rd.status === 'CONCLUDED') { estado = 'Entregado'; ve = vp; vr = 0; }
       else if (ve > 0 && vr > 0) { estado = 'Parcial'; vr = Math.max(0, vp - ve); }
       else if (vr > 0) { estado = 'Rechazado'; vr = vp; }
+      // los volúmenes se toman del Roadmap (Hl_Programado, HL_ENTR, HL_RECH) cuando el archivo los trae;
+      // Bees solo decide el estado del pedido
+      if (hr && hr.hlEntr !== null && hr.hlEntr !== undefined) { ve = hr.hlEntr || 0; vr = hr.hlRech || 0; fuenteVol = 'roadmap'; }
       motivo = (hr && hr.motivoRechazo) || '';
     } else if (hr) {
       estado = 'Desplanificado';   // está en el Roadmap pero no en Bees
@@ -1041,17 +1102,17 @@ function construirUnificado() {
     }
     return {
       codigo: codigo, ruta: ruta, cliente: (hr && hr.cliente) || (rd && rd.cliente) || '', vehiculo: vehiculo,
-      placaKey: placaClave(vehiculo), direccion: (hr && hr.direccion) || '', ciudad: (hr && hr.ciudad) || '',
+      placaKey: placaClave(vehiculo), direccion: (hr && hr.direccion) || (datosCli[codigo] ? datosCli[codigo].d : ''), ciudad: (hr && hr.ciudad) || (datosCli[codigo] ? datosCli[codigo].c : ''),
       viaje: (hr && hr.viaje) || '', empresa: empresa, fecha: fecha,
       alerta: !!(hr && hr.alerta === 'Sí'), zonaComercial: (hr && hr.zonaComercial) || '', supervisor: (hr && hr.supervisor) || '',
       transporte: (hr && hr.transporte) || (rd && rd.tour) || '',
       volumenProgramado: vp, volumenEntregado: ve, volumenRechazado: vr,
-      estado: estado, motivoRechazo: motivo, status: rd ? rd.status : '',
+      estado: estado, fuenteVol: fuenteVol, motivoRechazo: motivo, status: rd ? rd.status : '',
       rdIni: rd ? rd.tripStartMs : null, rdUlt: rd ? rd.lastMs : null,
       visita: rd ? rd.visita : null, ordenOrig: rd ? rd.ordenOrig : null, llegadaMs: rd ? rd.llegadaMs : null, finMs: rd ? rd.finMs : null,
       reprog: rd ? (rd.reprog || 0) : 0, motivoReprog: rd ? (rd.motivoReprog || '') : '', dentroRadio: rd ? rd.dentroRadio : '',
-      retro: (hr && hr.retro) || '', fechaAlerta: hr ? hr.fechaAlerta : null, lat: hr ? hr.latitud : null, lon: hr ? hr.longitud : null,
-      tour: rd ? rd.tour : ''
+      retro: (hr && hr.retro) || '', fechaAlerta: hr ? hr.fechaAlerta : null, lat: hr && hr.latitud !== null && hr.latitud !== undefined ? hr.latitud : (datosCli[codigo] && datosCli[codigo].lat !== null && datosCli[codigo].lat !== undefined ? datosCli[codigo].lat : null), lon: hr && hr.longitud !== null && hr.longitud !== undefined ? hr.longitud : (datosCli[codigo] && datosCli[codigo].lon !== null && datosCli[codigo].lon !== undefined ? datosCli[codigo].lon : null),
+      tour: rd ? rd.tour : '', entregaCjs: hr ? hr.entregaCjs : 0
     };
   });
   return _cacheUni;
@@ -1077,7 +1138,7 @@ function agregarPorRuta(lista) {
     g.volP += r.volumenProgramado || 0;
     g.volE += r.volumenEntregado || 0;
     g.volR += r.volumenRechazado || 0;
-    if (r.estado === 'Rechazado') g.volRTotal += r.volumenRechazado || 0;
+    if (r.estado === 'Rechazado' || (r.fuenteVol === 'roadmap' && r.volumenRechazado > 0 && r.volumenRechazado >= r.volumenProgramado * 0.999)) g.volRTotal += r.volumenRechazado || 0;
   });
   return Object.keys(mapa).map(function (k) {
     var g = mapa[k];
@@ -1545,6 +1606,8 @@ function renderRail() {
   var bl = state.sic[fechaSel];
   setEstado('est-sic', fSic.length > 0, fSic.length ? fSic.length + ' día(s)' + (bl ? ' · ' + new Set(bl.filas.map(function (x) { return x.clave; })).size + ' unidades hoy' + (bl.runSeg !== null ? ' · act. ' + fmtHora(bl.runSeg) : '') : '') : '');
   setEstado('est-roadmap', state.hr.length > 0, state.hr.length + ' registros · ' + new Set(state.hr.map(function (r) { return r.fecha; })).size + ' día(s)');
+  var nk = state.kml ? Object.keys(state.kml.codes).length + Object.keys(state.kml.nombres).length + Object.keys(state.kml.rutas || {}).length : 0;
+  setEstado('est-kml', nk > 0, state.kml && state.kml.archivos.length ? state.kml.archivos.length + ' archivo(s) · ' + state.kml.archivos.reduce(function (a, x) { return a + x.puntos; }, 0) + ' puntos' : '');
   setEstado('est-bees', state.rd.length > 0, state.rd.length + ' registros · ' + new Set(state.rd.map(function (r) { return r.tourDate; })).size + ' día(s)');
 
   $('cfgUmbral').value = state.cfg.umbral; $('cfgAmarillo').value = state.cfg.amarillo;
@@ -2219,8 +2282,9 @@ function wireMapa() {
 
 /* ---------------- mapa geográfico (teselas de OpenStreetMap, sin librerías) ---------------- */
 var PROVEEDORES_MAPA = [
-  { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
-  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', attr: 'Mapa © Esri y colaboradores' }
+  { n: 'Calles', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', attr: 'Esri, HERE, Garmin, © colaboradores de OpenStreetMap' },
+  { n: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: 'Esri, Maxar, Earthstar Geographics' },
+  { n: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }
 ];
 var miniMapa = null;
 var geoCola = { corriendo: false, cancelar: false, hechos: 0, total: 0, error: '' };
@@ -2231,12 +2295,13 @@ function MiniMapa(el) {
   self.tiles = {}; self.puntos = []; self.err = 0; self.ok = 0; self.prov = 0;
   el.innerHTML = '<div class="mm-tiles"></div><svg class="mm-svg" xmlns="http://www.w3.org/2000/svg"></svg>' +
     '<div class="mm-zoom"><button type="button" data-z="1" aria-label="Acercar">+</button><button type="button" data-z="-1" aria-label="Alejar">−</button></div>' +
-    '<div class="mm-attr"></div><div class="mm-msg" hidden></div>';
+    '<div class="mm-capas">' + PROVEEDORES_MAPA.map(function (pv, i) { return '<button type="button" data-prov="' + i + '" aria-pressed="' + (i === 0) + '">' + pv.n + '</button>'; }).join('') + '</div><div class="mm-attr"></div><div class="mm-msg" hidden></div>';
   self.attr = el.querySelector('.mm-attr'); self.attr.innerHTML = PROVEEDORES_MAPA[0].attr;
+  el.querySelector('.mm-capas').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) self.cambiarCapa(+b.getAttribute('data-prov')); });
   self.capaT = el.querySelector('.mm-tiles'); self.svg = el.querySelector('.mm-svg'); self.msg = el.querySelector('.mm-msg');
   var drag = null;
   el.addEventListener('pointerdown', function (e) {
-    if (e.target.closest('.mm-zoom') || e.target.closest('.nodo')) return;
+    if (e.target.closest('.mm-zoom') || e.target.closest('.mm-capas') || e.target.closest('.nodo')) return;
     drag = { x: e.clientX, y: e.clientY, lat: self.lat, lon: self.lon, id: e.pointerId };
     el.setPointerCapture(e.pointerId); el.classList.add('arrastrando');
   });
@@ -2278,11 +2343,15 @@ MiniMapa.prototype.zoomEn = function (d, ev) {
 };
 MiniMapa.prototype.ajustar = function () {
   var p = this.puntos.filter(function (q) { return q.lat !== undefined; });
+  if (!p.length && state.kml && state.kml.lineas.length) {
+    p = [];
+    state.kml.lineas.forEach(function (l) { l.pts.forEach(function (c) { p.push({ lat: c[0], lon: c[1] }); }); });
+  }
   if (!p.length) return;
   var w = this.el.clientWidth || 800, h = this.el.clientHeight || 500;
   var la = p.map(function (q) { return q.lat; }), lo = p.map(function (q) { return q.lon; });
   var minLa = Math.min.apply(null, la), maxLa = Math.max.apply(null, la), minLo = Math.min.apply(null, lo), maxLo = Math.max.apply(null, lo);
-  var z = 17;
+  var z = 19;
   for (; z > 3; z--) {
     var a = this.aMundo(maxLa, minLo, z), b = this.aMundo(minLa, maxLo, z);
     if (Math.abs(b.x - a.x) < w - 120 && Math.abs(b.y - a.y) < h - 120) break;
@@ -2306,12 +2375,8 @@ MiniMapa.prototype.dibujar = function () {
         im.onerror = function () {
           self.err++;
           if (!self.ok && self.err >= 3) {
-            if (self.prov < PROVEEDORES_MAPA.length - 1) {
-              // el proveedor no responde: se cambia al siguiente y se recargan las teselas
-              self.prov++; self.err = 0; self.attr.innerHTML = PROVEEDORES_MAPA[self.prov].attr;
-              Object.keys(self.tiles).forEach(function (k) { self.tiles[k].remove(); delete self.tiles[k]; });
-              self.dibujar();
-            } else { self.msg.textContent = 'No se pudo cargar el mapa base. Revisa tu conexión a internet.'; self.msg.hidden = false; }
+            if (self.prov < PROVEEDORES_MAPA.length - 1) { self.cambiarCapa(self.prov + 1); }
+            else { self.msg.textContent = 'No se pudo cargar el mapa base. Revisa tu conexión a internet.'; self.msg.hidden = false; }
           }
         };
         im.referrerPolicy = 'no-referrer-when-downgrade';
@@ -2325,14 +2390,23 @@ MiniMapa.prototype.dibujar = function () {
   self.svg.setAttribute('width', w); self.svg.setAttribute('height', h); self.svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
   self.svg.innerHTML = self.capaSvg ? self.capaSvg(function (lat, lon) { var q = self.aMundo(lat, lon, self.z); return { x: q.x - ox, y: q.y - oy }; }) : '';
 };
+MiniMapa.prototype.cambiarCapa = function (i) {
+  var self = this;
+  self.prov = i; self.err = 0; self.ok = 0; self.msg.hidden = true;
+  self.attr.innerHTML = PROVEEDORES_MAPA[i].attr;
+  self.el.querySelectorAll('.mm-capas button').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-prov') === i)); });
+  Object.keys(self.tiles).forEach(function (k) { self.tiles[k].remove(); delete self.tiles[k]; });
+  self.dibujar();
+};
 MiniMapa.prototype.destruir = function () { if (this.ro) this.ro.disconnect(); this.el.innerHTML = ''; };
 
 /* --- coordenadas: del Roadmap si vienen, si no del buscador de direcciones --- */
 function claveGeo(r) { return ((r.direccion || '') + '|' + (r.ciudad || '')).toLowerCase().replace(/\s+/g, ' ').trim(); }
 function coordCliente(r) {
-  if (r.lat !== null && r.lat !== undefined && r.lon !== null && r.lon !== undefined) return { lat: r.lat, lon: r.lon, aprox: false };
-  var g = state.geo && state.geo[claveGeo(r)];
-  return g && g.lat !== undefined ? g : null;
+  var kk = kmlCliente(r); if (kk) { kk.origen = 'kml'; return kk; }   // 1.º mapas KML
+  if (r.lat !== null && r.lat !== undefined && r.lon !== null && r.lon !== undefined) return { lat: r.lat, lon: r.lon, aprox: false, origen: 'roadmap' };   // 2.º coordenadas del Roadmap
+  var g = state.geo && state.geo[claveGeo(r)];   // 3.º búsqueda de direcciones
+  return g && g.lat !== undefined ? Object.assign({ origen: 'busqueda' }, g) : null;
 }
 function limpiarDireccion(d) {
   return String(d || '')
@@ -2413,13 +2487,14 @@ async function ubicarClientes(g) {
 }
 
 function puntosGeo(g) {
-  return g.recorrido.map(function (s) { var c = coordCliente(s.r); return c ? { s: s, lat: c.lat, lon: c.lon, aprox: c.aprox } : null; }).filter(Boolean);
+  return g.recorrido.map(function (s) { var c = coordCliente(s.r); return c ? { s: s, lat: c.lat, lon: c.lon, aprox: c.aprox, origen: c.origen } : null; }).filter(Boolean);
 }
 function actualizarBarraGeo(g) {
   var b = $('geoEstado'); if (!b) return;
   var pts = puntosGeo(g), total = g.recorrido.length;
   var pend = g.recorrido.filter(function (s) { var r = s.r; return !coordCliente(r) && (r.direccion || r.ciudad); }).length;
-  b.textContent = geoCola.corriendo ? 'Ubicando clientes… ' + geoCola.hechos + ' de ' + geoCola.total + ' direcciones' : (pts.length + ' de ' + total + ' clientes ubicados' + (pts.some(function (p) { return p.aprox; }) ? ' · los círculos punteados son aproximados (solo se halló el distrito)' : ''));
+  var hayDir = g.recorrido.some(function (s) { return s.r.direccion || s.r.ciudad; });
+  b.textContent = !geoCola.corriendo && !pts.length && !hayDir ? 'Los clientes de esta ruta no traen dirección ni coordenadas (la dirección sale del Roadmap). Carga tus mapas KML con «Cargar KML» o importa el Excel del Roadmap.' : geoCola.corriendo ? 'Ubicando clientes… ' + geoCola.hechos + ' de ' + geoCola.total + ' direcciones' : (pts.length + ' de ' + total + ' clientes ubicados (' + ['kml', 'roadmap', 'busqueda'].map(function (o) { var n = pts.filter(function (p) { return p.origen === o; }).length; return n ? n + (o === 'kml' ? ' por KML' : (o === 'roadmap' ? ' por Roadmap' : ' por búsqueda de dirección')) : ''; }).filter(Boolean).join(', ') + ')' + (pts.some(function (p) { return p.aprox; }) ? ' · los círculos punteados son aproximados (solo se halló el distrito)' : ''));
   var bu = $('btnUbicar'), bc = $('btnUbicarCancel');
   if (bu) { bu.disabled = geoCola.corriendo || pend === 0; bu.textContent = pend === 0 && !geoCola.corriendo ? 'Clientes ubicados' : 'Ubicar clientes (' + pend + ')'; }
   if (bc) bc.hidden = !geoCola.corriendo;
@@ -2428,13 +2503,14 @@ function renderGeo(g, sv) {
   var nuevo = !(miniMapa && miniMapa.el.isConnected && miniMapa.ruta === g.ruta);
   if (nuevo) {
     if (miniMapa) miniMapa.destruir();
-    sv.innerHTML = '<div class="geo-barra"><button type="button" class="btn primario chico" id="btnUbicar">Ubicar clientes</button><button type="button" class="btn chico" id="btnUbicarCancel" hidden>Cancelar</button><span id="geoEstado" class="txt-mut"></span></div>' +
+    sv.innerHTML = '<div class="geo-barra"><button type="button" class="btn primario chico" id="btnUbicar">Ubicar clientes</button><button type="button" class="btn chico" id="btnUbicarCancel" hidden>Cancelar</button><button type="button" class="btn chico" id="btnKmlGeo">Cargar KML</button><span id="geoEstado" class="txt-mut"></span></div>' +
       '<div class="mm" id="mapaGeo" aria-label="Mapa geográfico de la ruta ' + esc(g.ruta) + '"></div>' +
-      '<p class="txt-mut" style="margin:8px 0 0;font-size:12.5px">Si el Roadmap trae latitud y longitud se usan tal cual. Si no, «Ubicar clientes» busca cada dirección en servicios abiertos basados en OpenStreetMap (Nominatim y Photon; les envía la dirección y el distrito, una por segundo). En Perú las direcciones con manzana y lote suelen ubicarse de forma aproximada.</p>';
+      '<p class="txt-mut" style="margin:8px 0 0;font-size:12.5px">Las ubicaciones salen primero de tus mapas KML (se cruzan por código o nombre del cliente), luego de la latitud y longitud del Roadmap. Para los que falten, «Ubicar clientes» busca cada dirección en servicios abiertos basados en OpenStreetMap (Nominatim y Photon; les envía la dirección y el distrito, una por segundo). En Perú las direcciones con manzana y lote suelen ubicarse de forma aproximada.</p>';
     miniMapa = new MiniMapa($('mapaGeo'));
     miniMapa.ruta = g.ruta;
     $('btnUbicar').onclick = function () { ubicarClientes(g); };
     $('btnUbicarCancel').onclick = function () { geoCola.cancelar = true; };
+    $('btnKmlGeo').onclick = function () { $('inputKml').click(); };
     redibujarGeo(g, true);
   } else redibujarGeo(g, false);
   actualizarBarraGeo(g);
@@ -2446,6 +2522,11 @@ function redibujarGeo(g, ajustar) {
   var ultimo = -1; pts.forEach(function (p, i) { if (p.s.ll !== null) ultimo = i; });
   m.capaSvg = function (xy) {
     var out = '', P = pts.map(function (p) { return xy(p.lat, p.lon); });
+    var Ls = state.kml && state.kml.lineas ? state.kml.lineas : [];
+    Ls.forEach(function (l) {
+      var d = l.pts.map(function (c, i) { var q = xy(c[0], c[1]); return (i ? 'L' : 'M') + q.x.toFixed(1) + ' ' + q.y.toFixed(1); }).join('');
+      out += '<path d="' + d + (l.poligono ? 'Z' : '') + '" fill="' + (l.poligono ? 'rgba(10,92,168,.08)' : 'none') + '" stroke="#0A5CA8" stroke-opacity=".6" stroke-width="2" stroke-linejoin="round"/>';
+    });
     for (var i = 1; i < pts.length; i++) {
       var a = pts[i - 1].s, b = pts[i].s, col, dash = '', w = 3.5;
       if (a.ll !== null && b.ll !== null) { var gap = a.fin !== null ? (b.ll - a.fin) / 60000 : (b.ll - a.ll) / 60000; col = gap > 60 ? '#CC3730' : (gap > 30 ? '#E0A100' : '#16895A'); w = 4.5; }
@@ -2464,7 +2545,324 @@ function redibujarGeo(g, ajustar) {
     }
     return out;
   };
-  if (ajustar && pts.length) m.ajustar(); else m.dibujar();
+  if (ajustar) m.ajustar(); else m.dibujar();
+}
+
+/* ---------------- mapas KML / KMZ ---------------- */
+function quitarHtml(t) {
+  var d = document.createElement('div'); d.innerHTML = String(t || '');
+  return (d.textContent || '').replace(/\s+/g, ' ').trim();
+}
+function normNombre(t) {
+  return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function coordsKml(txt) {
+  var out = [];
+  String(txt || '').trim().split(/\s+/).forEach(function (t) {
+    var p = t.split(',');
+    var lon = parseFloat(p[0]), lat = parseFloat(p[1]);
+    if (!isNaN(lat) && !isNaN(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) out.push([lat, lon]);
+  });
+  return out;
+}
+function hijoTexto(el, tag) {
+  for (var i = 0; i < el.children.length; i++) if (el.children[i].localName === tag) return el.children[i].textContent || '';
+  return '';
+}
+function parsearKml(texto) {
+  var doc = new DOMParser().parseFromString(texto, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('el archivo no es un KML válido');
+  var puntos = [], lineas = [];
+  var pm = doc.getElementsByTagNameNS('*', 'Placemark');
+  for (var i = 0; i < pm.length; i++) {
+    var p = pm[i];
+    var carpeta = '', a = p.parentElement;
+    while (a) { if (a.localName === 'Folder' || a.localName === 'Document') { var n = hijoTexto(a, 'name'); if (n) { carpeta = n.trim(); break; } } a = a.parentElement; }
+    var nombre = hijoTexto(p, 'name').trim();
+    var desc = quitarHtml(hijoTexto(p, 'description'));
+    var datos = [];
+    var ed = p.getElementsByTagNameNS('*', 'Data');
+    for (var k = 0; k < ed.length; k++) { var v = hijoTexto(ed[k], 'value'); if (v) datos.push(v.trim()); }
+    var sd = p.getElementsByTagNameNS('*', 'SimpleData');
+    for (var k2 = 0; k2 < sd.length; k2++) if (sd[k2].textContent) datos.push(sd[k2].textContent.trim());
+    var pts = p.getElementsByTagNameNS('*', 'Point');
+    for (var q = 0; q < pts.length; q++) {
+      var c = coordsKml(hijoTexto(pts[q], 'coordinates'));
+      if (c.length) puntos.push({ nombre: nombre, desc: desc, datos: datos, carpeta: carpeta, lat: c[0][0], lon: c[0][1] });
+    }
+    var geos = p.getElementsByTagNameNS('*', 'LineString');
+    var anillos = p.getElementsByTagNameNS('*', 'LinearRing');
+    [].slice.call(geos).concat([].slice.call(anillos)).forEach(function (g) {
+      var c2 = coordsKml(hijoTexto(g, 'coordinates'));
+      if (c2.length > 1) lineas.push({ n: nombre || carpeta, pts: c2, poligono: g.localName === 'LinearRing' });
+    });
+  }
+  var dn = doc.getElementsByTagNameNS('*', 'Document')[0];
+  return { puntos: puntos, lineas: lineas, docName: dn ? hijoTexto(dn, 'name').trim() : '' };
+}
+function candidatosCodigo(pt) {
+  var textos = [pt.nombre].concat(pt.datos, [pt.desc]);
+  var vistos = {}, out = [];
+  textos.forEach(function (t) {
+    (String(t || '').match(/\d{5,10}/g) || []).forEach(function (m) {
+      var c = normalizarCodigo(m);
+      if (!vistos[c]) { vistos[c] = 1; out.push(c); }
+    });
+  });
+  return out;
+}
+function adelgazar(pts, max) {
+  if (pts.length <= max) return pts;
+  var paso = pts.length / max, o = [];
+  for (var i = 0; i < max; i++) o.push(pts[Math.floor(i * paso)]);
+  o.push(pts[pts.length - 1]);
+  return o;
+}
+async function leerKmzTexto(buf) {
+  // un KMZ es un zip: se busca el .kml (doc.kml) y se descomprime con el navegador
+  var dv = new DataView(buf), u8 = new Uint8Array(buf);
+  var eocd = -1;
+  for (var i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 70000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('el KMZ no se pudo abrir');
+  var n = dv.getUint16(eocd + 10, true), off = dv.getUint32(eocd + 16, true), mejor = null;
+  for (var e = 0; e < n; e++) {
+    if (dv.getUint32(off, true) !== 0x02014b50) break;
+    var metodo = dv.getUint16(off + 10, true), csize = dv.getUint32(off + 20, true), nlen = dv.getUint16(off + 28, true), xlen = dv.getUint16(off + 30, true), clen = dv.getUint16(off + 32, true), lh = dv.getUint32(off + 42, true);
+    var nombre = new TextDecoder().decode(u8.subarray(off + 46, off + 46 + nlen));
+    if (/\.kml$/i.test(nombre) && (!mejor || /(^|\/)doc\.kml$/i.test(nombre))) mejor = { metodo: metodo, csize: csize, lh: lh };
+    off += 46 + nlen + xlen + clen;
+  }
+  if (!mejor) throw new Error('el KMZ no contiene un archivo .kml');
+  var lnlen = dv.getUint16(mejor.lh + 26, true), lxlen = dv.getUint16(mejor.lh + 28, true), ini = mejor.lh + 30 + lnlen + lxlen;
+  var datos = u8.subarray(ini, ini + mejor.csize);
+  if (mejor.metodo === 0) return new TextDecoder().decode(datos);
+  if (typeof DecompressionStream === 'undefined') throw new Error('este navegador no puede abrir KMZ; guarda el mapa como .kml');
+  var ds = new DecompressionStream('deflate-raw');
+  var resp = new Response(new Blob([datos]).stream().pipeThrough(ds));
+  return new TextDecoder().decode(await resp.arrayBuffer());
+}
+/* El nombre de cada punto puede venir como «|Cliente|Dirección|Cjs:5|VH:06:00-23:59|Tel:999» */
+function desglosarNombre(nombre) {
+  var t = String(nombre || '');
+  if (t.indexOf('|') === -1) return null;
+  var p = t.split('|').map(function (x) { return x.trim(); });
+  while (p.length && !p[0]) p.shift();
+  if (p.length < 2) return null;
+  var cj = null, tel = '';
+  p.forEach(function (x) { var m = x.match(/^Cjs\s*:\s*([\d.,]+)/i); if (m) cj = parseFloat(m[1].replace(',', '.')); var m2 = x.match(/^Tel\s*:\s*(\d+)/i); if (m2) tel = m2[1]; });
+  return { cliente: p[0], dir: p[1] || '', cjs: cj, tel: tel };
+}
+/* ruta, viaje y fecha salen del nombre del archivo: BK3579_1_2026-10-23.kml */
+function metaDeArchivo(txt) {
+  var m = String(txt || '').match(/([A-Za-z]{1,4}\d{2,6})_(\d+)_(\d{4}-\d{2}-\d{2})/);
+  return m ? { ruta: m[1].toUpperCase(), viaje: m[2], fecha: m[3] } : null;
+}
+function coincideNombre(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // los nombres del KML suelen venir cortados a 35 letras
+  return (b.length >= 12 && a.indexOf(b) === 0) || (a.length >= 12 && b.indexOf(a) === 0);
+}
+var _kmlIdx = null, _kmlMemo = {};
+function reiniciarKml() { _kmlIdx = null; _kmlMemo = {}; invalidar(); }
+function indiceKml() {
+  if (_kmlIdx) return _kmlIdx;
+  _kmlIdx = {};
+  var R = (state.kml && state.kml.rutas) || {};
+  Object.keys(R).forEach(function (k) {
+    var e = R[k], ik = e.ruta + '|' + (e.fecha || '');
+    (_kmlIdx[ik] = _kmlIdx[ik] || []).push.apply(_kmlIdx[ik], e.pts.map(function (q) { return q; }));
+  });
+  return _kmlIdx;
+}
+function kmlCliente(r) {
+  var K = state.kml; if (!K) return null;
+  var mk = r.codigo + '|' + r.fecha + '|' + r.ruta;
+  if (_kmlMemo[mk] !== undefined) return _kmlMemo[mk];
+  var res = null;
+  // 1) por ruta y fecha: se cruza el nombre del cliente (y las cajas como desempate)
+  var lista = indiceKml()[(r.ruta || '') + '|' + (r.fecha || '')];
+  if (lista && r.cliente) {
+    var nn = normNombre(r.cliente), cand = lista.filter(function (q) { return coincideNombre(nn, q.c); });
+    if (cand.length > 1 && r.entregaCjs) { var c2 = cand.filter(function (q) { return q.j === r.entregaCjs; }); if (c2.length) cand = c2; }
+    if (cand.length > 1) { var d2 = normNombre(r.direccion); var c3 = cand.filter(function (q) { return d2 && q.d && (d2.indexOf(q.d) === 0 || q.d.indexOf(d2) === 0); }); if (c3.length) cand = c3; }
+    if (cand.length) res = { lat: cand[0].la, lon: cand[0].lo, aprox: false };
+  }
+  // 2) por código del cliente (KML con códigos)
+  if (!res) { var v = K.codes[r.codigo]; if (v) res = { lat: v[0], lon: v[1], aprox: false }; }
+  // 3) por nombre en cualquier archivo
+  if (!res && r.cliente) { var v2 = K.nombres[normNombre(r.cliente)]; if (v2) res = { lat: v2[0], lon: v2[1], aprox: false }; }
+  _kmlMemo[mk] = res;
+  return res;
+}
+var ultimoInforme = null;
+async function importarKml(files) {
+  state.kml = state.kml || { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} };
+  var K = state.kml; K.rutas = K.rutas || {};
+  var resumen = [], informes = [];
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    ocupado('Leyendo ' + f.name + '…'); await pausa();
+    var r;
+    try {
+      var texto = /\.kmz$/i.test(f.name) ? await leerKmzTexto(await f.arrayBuffer()) : await f.text();
+      r = parsearKml(texto);
+    } catch (e) { cerrarModal(); avisar('No se pudo leer ' + f.name + ': ' + e.message, true); continue; }
+    cerrarModal();
+    if (!r.puntos.length && !r.lineas.length) { avisar('«' + f.name + '» no tiene puntos ni líneas con coordenadas.', true); continue; }
+    var meta = metaDeArchivo(f.name) || metaDeArchivo(r.docName);
+    var pts = [], porCodigo = 0, porNombre = 0;
+    r.puntos.forEach(function (p) {
+      var ll = [Math.round(p.lat * 1e6) / 1e6, Math.round(p.lon * 1e6) / 1e6];
+      var d = desglosarNombre(p.nombre);
+      if (d) {
+        var cn = normNombre(d.cliente);
+        pts.push({ c: cn, d: normNombre(d.dir), j: d.cjs, t: d.tel, la: ll[0], lo: ll[1] });
+        if (cn.length > 3) K.nombres[cn] = ll;
+        porNombre++;
+      } else {
+        var cs = candidatosCodigo(p);
+        cs.forEach(function (c) { K.codes[c] = ll; });
+        if (cs.length) porCodigo++;
+        var nn = normNombre(p.nombre);
+        if (nn.length > 3 && !/^\d+$/.test(nn)) { K.nombres[nn] = ll; if (!cs.length) porNombre++; }
+      }
+    });
+    if (pts.length) {
+      var clave = (meta ? meta.ruta + '|' + meta.fecha + '|' + meta.viaje : f.name);
+      K.rutas[clave] = { ruta: meta ? meta.ruta : '', viaje: meta ? meta.viaje : '', fecha: meta ? meta.fecha : '', archivo: f.name, pts: pts };
+    }
+    r.lineas.forEach(function (l) { K.lineas.push({ n: l.n, poligono: l.poligono, pts: adelgazar(l.pts, 300).map(function (c) { return [Math.round(c[0] * 1e5) / 1e5, Math.round(c[1] * 1e5) / 1e5]; }) }); });
+    if (K.lineas.length > 400) K.lineas = K.lineas.slice(-400);
+    K.archivos = K.archivos.filter(function (a) { return a.nombre !== f.name; });
+    K.archivos.push({ nombre: f.name, puntos: r.puntos.length, lineas: r.lineas.length });
+    informes.push({ archivo: f.name, meta: meta, puntos: r.puntos.length, lineas: r.lineas.length, pts: pts, ejemplos: r.puntos.slice(0, 6), porCodigo: porCodigo, porNombre: porNombre });
+  }
+  reiniciarKml(); guardar();
+  if (informes.length) mostrarInformeKml(informes);
+  refrescar(true);
+}
+function mostrarInformeKml(informes) {
+  var h = '<h3>Lectura de los mapas KML</h3>';
+  informes.forEach(function (inf) {
+    // cuántos clientes del Roadmap/Bees coinciden con este archivo
+    var uni = construirUnificado(), cl = inf.meta ? uni.filter(function (x) { return x.ruta === inf.meta.ruta && x.fecha === inf.meta.fecha; }) : [];
+    var enc = 0; cl.forEach(function (x) { if (kmlCliente(x)) enc++; });
+    var ptsEnc = 0;
+    if (cl.length) inf.pts.forEach(function (q) { if (cl.some(function (x) { return coincideNombre(normNombre(x.cliente), q.c); })) ptsEnc++; });
+    h += '<p><b>' + esc(inf.archivo) + '</b>' + (inf.meta ? ' · ruta ' + esc(inf.meta.ruta) + ' · viaje ' + esc(inf.meta.viaje) + ' · ' + formatearFecha(inf.meta.fecha) : '') + '<br>' + inf.puntos + ' puntos' + (inf.lineas ? ' · ' + inf.lineas + ' líneas o zonas' : '') + '</p>';
+    if (inf.meta && cl.length) h += '<p>Esa ruta tiene <b>' + cl.length + ' clientes</b> cargados; <b>' + enc + ' quedaron ubicados</b> con este KML (' + ptsEnc + ' de ' + inf.puntos + ' puntos del KML cruzaron con un cliente).</p>';
+    else if (inf.meta) h += '<p class="txt-bad">Todavía no hay clientes cargados de la ruta ' + esc(inf.meta.ruta) + ' para el ' + formatearFecha(inf.meta.fecha) + '. Importa el Roadmap/Bees de ese día y se ubicarán solos.</p>';
+    else h += '<p class="txt-mut">El nombre del archivo no tiene el formato RUTA_VIAJE_FECHA (por ejemplo BK3579_1_2026-10-23.kml); se cruzará por el nombre del cliente en cualquier ruta.</p>';
+    h += '<div class="tabla-wrap" style="max-height:230px;overflow:auto"><table class="mini-t"><thead><tr><th>Punto del KML</th><th>Coordenadas</th><th>Cliente encontrado</th></tr></thead><tbody>' +
+      inf.ejemplos.map(function (p) {
+        var d = desglosarNombre(p.nombre), nm = d ? d.cliente : p.nombre, cn = normNombre(nm);
+        var cli = cl.filter(function (x) { return coincideNombre(normNombre(x.cliente), cn); })[0];
+        return '<tr><td>' + esc(nm) + (d && d.dir ? '<small class="txt-mut" style="display:block">' + esc(d.dir) + '</small>' : '') + '</td><td class="num">' + p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + '</td><td>' + (cli ? '<span class="txt-ok">' + esc(cli.codigo) + '</span>' : '<span class="txt-mut">—</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  });
+  h += '<div class="acciones"><button class="btn primario" id="mCerrar" type="button">Entendido</button></div>';
+  var cm = modal(h, true); cm.querySelector('#mCerrar').onclick = cerrarModal;
+}
+
+/* ---------------- pendientes, alertas y no alertados ---------------- */
+var STATUS_TXT = { NOT_STARTED: 'No iniciado', DELIVERY_STARTED: 'En atención', RESCHEDULED: 'Reprogramado', CONCLUDED: 'Entregado', PARTIAL_DELIVERY: 'Parcial', WAITING_MODULATION: 'Modulación en espera', DEFINITELY_RETURNED: 'Rechazado' };
+function statusBeesTxt(r) { return r.status ? (STATUS_TXT[r.status] || r.status) : (r.estado === 'Desplanificado' ? 'No está en Bees' : '—'); }
+function clsStatusBees(r) {
+  var s = r.status;
+  if (s === 'CONCLUDED') return 'c-atendido';
+  if (s === 'DELIVERY_STARTED') return 'c-enatencion';
+  if (s === 'RESCHEDULED') return 'c-modificado';
+  if (s === 'PARTIAL_DELIVERY') return 'c-parcial';
+  if (s === 'WAITING_MODULATION' || s === 'DEFINITELY_RETURNED' || r.estado === 'Rechazado') return 'c-rechazado';
+  return 'c-pendiente';
+}
+function fmtCjs(n) { return n ? fmtNum(n, 0) : '0'; }
+
+function listasPend() {
+  var f = { emp: $('fpEmpresa').value, ruta: $('fpRuta').value, tx: ($('fpTexto').value || '').toLowerCase().trim() };
+  var uni = datosDia();
+  poblarOpciones($('fpEmpresa'), 'Todas las empresas', Array.from(new Set(uni.map(function (r) { return r.empresa; }).filter(Boolean))).sort(), nombreEmpresa, uni.some(function (r) { return !r.empresa; }));
+  poblarOpciones($('fpRuta'), 'Todas las rutas', Array.from(new Set(uni.map(function (r) { return r.ruta; }).filter(Boolean))).sort());
+  var l = uni.filter(function (r) {
+    if (f.emp && (f.emp === '__sin__' ? r.empresa : r.empresa !== f.emp)) return false;
+    if (f.ruta && r.ruta !== f.ruta) return false;
+    if (f.tx && (r.codigo + ' ' + r.cliente + ' ' + r.ruta + ' ' + r.vehiculo).toLowerCase().indexOf(f.tx) === -1) return false;
+    return true;
+  });
+  return {
+    pend: l.filter(function (r) { return r.estado === 'Pendiente'; }),
+    alert: l.filter(function (r) { return r.alerta; }),
+    noAlert: l.filter(function (r) { return (r.estado === 'Rechazado' || r.estado === 'Parcial') && !r.alerta; }),
+    todos: l
+  };
+}
+function ordenarPend(lista, modo) {
+  var l = lista.slice();
+  if (modo === 'cajas') l.sort(function (a, b) { return (b.entregaCjs || 0) - (a.entregaCjs || 0) || (b.volumenProgramado || 0) - (a.volumenProgramado || 0); });
+  else if (modo === 'ruta') l.sort(function (a, b) { return (a.ruta || '').localeCompare(b.ruta || '') || (b.volumenProgramado || 0) - (a.volumenProgramado || 0); });
+  else l.sort(function (a, b) { return (b.volumenProgramado || 0) - (a.volumenProgramado || 0) || (b.entregaCjs || 0) - (a.entregaCjs || 0); });
+  return l;
+}
+function sumaPend(l) { return { hl: l.reduce(function (a, r) { return a + (r.volumenProgramado || 0); }, 0), cj: l.reduce(function (a, r) { return a + (r.entregaCjs || 0); }, 0) }; }
+function filaBase(r) {
+  return '<td><span class="cel-ruta">' + esc(r.ruta || '(Sin ruta)') + '</span></td><td>' + esc(nombreEmpresa(r.empresa)) + '</td><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td>';
+}
+function tablaPend(idTabla, lista, extraTh, extraTd) {
+  var s = sumaPend(lista), MAX = 600;
+  var head = '<thead><tr><th>Ruta</th><th>Empresa</th><th>Código</th><th>Cliente</th>' + extraTh + '<th class="r">Volumen</th><th class="r">Cajas</th></tr></thead>';
+  var cuerpo = lista.slice(0, MAX).map(function (r) {
+    return '<tr>' + filaBase(r) + extraTd(r) + '<td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num">' + fmtCjs(r.entregaCjs) + '</td></tr>';
+  }).join('');
+  var cols = 4 + (extraTh.match(/<th/g) || []).length;
+  var pie = lista.length ? '<tfoot><tr><td colspan="' + cols + '"><b>Total · ' + lista.length + ' clientes' + (lista.length > MAX ? ' (se muestran los primeros ' + MAX + ')' : '') + '</b></td><td class="r num"><b>' + fmtHl(s.hl) + '</b></td><td class="r num"><b>' + fmtCjs(s.cj) + '</b></td></tr></tfoot>' : '';
+  $(idTabla).innerHTML = lista.length ? head + '<tbody>' + cuerpo + '</tbody>' + pie : '<tbody><tr><td class="vacio-fila">Sin clientes para mostrar.</td></tr></tbody>';
+}
+function renderPend() {
+  var L = listasPend();
+  var sp = sumaPend(L.pend), sa = sumaPend(L.alert), sn = sumaPend(L.noAlert);
+  $('tilesPend').innerHTML =
+    tile('Pendientes de entregar', L.pend.length, fmtHl(sp.hl) + ' · ' + fmtCjs(sp.cj) + ' cajas', '--c-pendiente') +
+    tile('Alertados', L.alert.length, fmtHl(sa.hl) + ' · ' + fmtCjs(sa.cj) + ' cajas', '--c-alertado') +
+    tile('Rechazados o parciales sin alerta', L.noAlert.length, fmtHl(sn.hl) + ' · ' + fmtCjs(sn.cj) + ' cajas', '--c-rechazado');
+  $('notaPend').textContent = datosDia().some(function (r) { return r.entregaCjs; }) ? '' : 'Este día no trae cajas: se leen de la columna «Entrega Cjs» del Roadmap.';
+
+  tablaPend('tablaPend', ordenarPend(L.pend, $('opOrden1').value),
+    '<th>Situación</th><th>Hora de salida</th>',
+    function (r) { return '<td><span class="etq ' + clsStatusBees(r) + '">' + esc(statusBeesTxt(r)) + '</span></td><td class="num">' + (r.rdIni ? hhmm(r.rdIni) : '—') + '</td>'; });
+  $('cntPend').textContent = L.pend.length + ' clientes · ' + fmtHl(sp.hl) + ' · ' + fmtCjs(sp.cj) + ' cajas';
+
+  tablaPend('tablaAlert', ordenarPend(L.alert, $('opOrden2').value),
+    '<th>Estado en Bees</th><th>Hora de alerta</th><th>Motivo / retroalimentación</th>',
+    function (r) { return '<td><span class="etq ' + clsStatusBees(r) + '">' + esc(statusBeesTxt(r)) + '</span></td><td class="num">' + (r.fechaAlerta ? hhmm(r.fechaAlerta) : '—') + '</td><td class="txt-mut" style="max-width:340px">' + esc([r.motivoRechazo, r.retro].filter(Boolean).join(' · ') || '—') + '</td>'; });
+  $('cntAlert').textContent = L.alert.length + ' clientes · ' + fmtHl(sa.hl) + ' · ' + fmtCjs(sa.cj) + ' cajas';
+
+  var rech = L.noAlert.filter(function (r) { return r.estado === 'Rechazado'; }).length, par = L.noAlert.length - rech;
+  tablaPend('tablaNoAlert', ordenarPend(L.noAlert, $('opOrden3').value),
+    '<th>Tipo</th><th>Estado en Bees</th><th>Motivo (Roadmap)</th>',
+    function (r) { return '<td><span class="etq e-' + r.estado + '">' + (r.estado === 'Parcial' ? 'Modificado parcial' : 'Rechazado') + '</span></td><td>' + esc(statusBeesTxt(r)) + '</td><td class="txt-mut" style="max-width:300px">' + esc(r.motivoRechazo || '—') + '</td>'; });
+  $('cntNoAlert').textContent = L.noAlert.length + ' clientes (' + rech + ' rechazados, ' + par + ' parciales) · ' + fmtHl(sn.hl) + ' · ' + fmtCjs(sn.cj) + ' cajas';
+}
+function exportarPend(cual) {
+  var L = listasPend(), lista, orden, nombre;
+  if (cual === 'pend') { lista = ordenarPend(L.pend, $('opOrden1').value); nombre = 'Pendientes'; }
+  else if (cual === 'alert') { lista = ordenarPend(L.alert, $('opOrden2').value); nombre = 'Alertas'; }
+  else { lista = ordenarPend(L.noAlert, $('opOrden3').value); nombre = 'Sin alerta'; }
+  if (!lista.length) { avisar('No hay clientes para exportar.', true); return; }
+  var filas = lista.map(function (r) {
+    return { 'Ruta': r.ruta, 'Empresa': nombreEmpresa(r.empresa), 'Código': r.codigo, 'Cliente': r.cliente, 'Estado en Bees': statusBeesTxt(r), 'Estado': r.estado,
+      'Volumen (hl)': +(r.volumenProgramado || 0).toFixed(3), 'Cajas': r.entregaCjs || 0, 'Alerta': r.alerta ? 'Sí' : 'No',
+      'Hora alerta': r.fechaAlerta ? hhmm(r.fechaAlerta) : '', 'Motivo': r.motivoRechazo || '', 'Retroalimentación': r.retro || '' };
+  });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), nombre);
+  var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  descargar(new Blob([out], { type: 'application/octet-stream' }), 'DABRIXO_' + nombre.replace(/ /g, '_') + '_' + fechaSel + '.xlsx');
+}
+function wirePend() {
+  ['fpEmpresa', 'fpRuta', 'opOrden1', 'opOrden2', 'opOrden3'].forEach(function (id) { $(id).addEventListener('change', renderPend); });
+  $('fpTexto').addEventListener('input', renderPend);
+  document.querySelectorAll('[data-exp-pend]').forEach(function (b) { b.addEventListener('click', function () { exportarPend(b.getAttribute('data-exp-pend')); }); });
 }
 
 /* ---------------- exportar y copias ---------------- */
@@ -2516,11 +2914,12 @@ function refrescar(forzar) {
   if (vista === 'sif' || forzar) renderSif();
   if (vista === 'avance' || forzar) renderAvance();
   if (vista === 'mapa') renderMapa();
+  if (vista === 'pend') renderPend();
   if (vista === 'clientes' && !forzar) renderAvance();
 }
 function cambiarVista(v) {
   vista = v;
-  ['sif', 'avance', 'mapa', 'clientes'].forEach(function (k) {
+  ['sif', 'avance', 'mapa', 'pend', 'clientes'].forEach(function (k) {
     $('vista-' + k).hidden = k !== v;
     $('tab-' + k).setAttribute('aria-selected', String(k === v));
   });
@@ -2532,7 +2931,7 @@ var tipoImportando = 'roadmap';
 function wire() {
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-imp]');
-    if (b) { tipoImportando = b.getAttribute('data-imp'); $('inputArchivo').click(); return; }
+    if (b) { tipoImportando = b.getAttribute('data-imp'); if (tipoImportando === 'kml') $('inputKml').click(); else $('inputArchivo').click(); return; }
     var t = e.target.closest('.tab');
     if (t) { cambiarVista(t.getAttribute('data-vista')); return; }
     var lamp = e.target.closest('.lamp');
@@ -2550,12 +2949,17 @@ function wire() {
     var fa = e.target.closest('tr[data-av]');
     if (fa) { var k = fa.getAttribute('data-av'); expandidas[k] = !expandidas[k]; renderAvance(); return; }
   });
+  $('inputKml').addEventListener('change', function (e) {
+    var files = Array.prototype.slice.call(e.target.files); e.target.value = '';
+    if (files.length) importarKml(files);
+  });
   $('inputArchivo').addEventListener('change', function (e) {
     var files = Array.prototype.slice.call(e.target.files);
     e.target.value = '';
     if (files.length) importarArchivos(files, tipoImportando);
   });
   wireMapa();
+  wirePend();
   $('selFecha').addEventListener('change', function (e) { fechaSel = e.target.value; refrescar(true); });
   ['fsEmpresa', 'fsSem', 'fsOrden'].forEach(function (id) { $(id).addEventListener('change', renderSif); });
   $('fsTexto').addEventListener('input', renderSif);
@@ -2602,7 +3006,7 @@ function wire() {
       if (!o || !Array.isArray(o.hr) || !Array.isArray(o.rd)) throw new Error('El archivo no es una copia de este programa.');
       var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros Roadmap, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
-      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.geo = o.geo || state.geo || {};
+      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
       state.cfg = Object.assign({ umbral: 10, amarillo: 9, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {});
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Copia restaurada.');
     } catch (err) { avisar('No se pudo restaurar: ' + err.message, true); }
@@ -2613,10 +3017,20 @@ function wire() {
   }
   $('btnEjemplo').addEventListener('click', alternarEjemplo);
   $('btnEjemplo2').addEventListener('click', alternarEjemplo);
+  $('btnBorrarBusq').addEventListener('click', function () {
+    confirmar('Borrar ubicaciones buscadas', 'Se borrarán las ubicaciones que salieron de la búsqueda de direcciones (no las del KML ni las del Roadmap). Podrás volver a buscarlas.', 'Borrar').then(function (ok) {
+      if (!ok) return; state.geo = {}; guardar(); refrescar(true); avisar('Ubicaciones buscadas borradas.');
+    });
+  });
+  $('btnQuitarKml').addEventListener('click', function () {
+    confirmar('Quitar mapas KML', 'Se borrarán las ubicaciones cargadas desde los KML. El resto de los datos no cambia.', 'Quitar').then(function (ok) {
+      if (!ok) return; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; reiniciarKml(); guardar(); refrescar(true); avisar('Mapas KML quitados.');
+    });
+  });
   $('btnVaciar').addEventListener('click', function () {
     confirmar('Vaciar todo', 'Se borrarán Roadmap, Bees, Ruta SIF, días cerrados y horas planeadas de este navegador. Esta acción no se puede deshacer. ¿Ya descargaste una copia?', 'Vaciar todo').then(function (ok) {
       if (!ok) return;
-      state.hr = []; state.rd = []; state.sic = {}; state.cerrados = []; state.cfg.manual = {};
+      state.hr = []; state.rd = []; state.sic = {}; state.cerrados = []; state.cfg.manual = {}; state.geo = {}; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; _kmlIdx = null; _kmlMemo = {};
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Todo vaciado.');
     });
   });
@@ -2626,7 +3040,10 @@ function wire() {
   window.addEventListener('drop', function (e) {
     e.preventDefault();
     var files = Array.prototype.slice.call(e.dataTransfer.files || []);
-    if (files.length) importarArchivos(files, 'roadmap');
+    var esKml = function (f) { return /\.(kml|kmz)$/i.test(f.name); };
+    var fk = files.filter(esKml), fx = files.filter(function (f) { return !esKml(f); });
+    if (fk.length) importarKml(fk);
+    if (fx.length) importarArchivos(fx, 'roadmap');
   });
   if (window.matchMedia) {
     var mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -2639,7 +3056,7 @@ async function iniciar() {
   var ok = await DB.abrir();
   var g = await DB.get('estado');
   if (g && g.hr && g.rd) {
-    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.geo = g.geo || {};
+    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
     state.cfg = Object.assign(state.cfg, g.cfg || {});
     state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
   }
