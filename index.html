@@ -403,6 +403,8 @@ tr.fila-sel td { background: var(--accent-soft); }
 .vacio-fila { padding: 18px; color: var(--ink-3); text-align: center; }
 tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top: 2px solid var(--line); }
 
+.etq-v { display: inline-block; min-width: 26px; text-align: center; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-family: var(--f-head); font-weight: 600; font-size: 13px; }
+
 </style>
 </head>
 <body>
@@ -448,8 +450,9 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
     <details>
       <summary class="rail-h">Parámetros del semáforo</summary>
       <div>
-        <label class="campo"><span>Ruta SIF si pasa de (horas)</span><input type="number" id="cfgUmbral" min="1" max="24" step="0.25"></label>
-        <label class="campo"><span>Amarillo desde (horas)</span><input type="number" id="cfgAmarillo" min="1" max="24" step="0.25"></label>
+        <label class="campo"><span>Tiempo de Ruta SIF (horas)</span><input type="number" id="cfgUmbral" min="1" max="24" step="0.25"></label>
+        <label class="campo"><span>Tolerancia (minutos)</span><input type="number" id="cfgTolerancia" min="0" max="180" step="5"></label>
+        <label class="campo"><span>En riesgo desde (horas)</span><input type="number" id="cfgAmarillo" min="1" max="24" step="0.25"></label>
         <label class="campo"><span>Proyectar desde avance (%)</span><input type="number" id="cfgMinProy" min="5" max="95" step="5"></label>
         <label class="check"><input type="checkbox" id="cfgUsarProy"><span>Usar la proyección por ritmo en el semáforo (adelanta alertas, pero es poco precisa con avance bajo)</span></label>
       </div>
@@ -499,6 +502,7 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
       <button class="btn" type="button" id="btnExportar2">Exportar a Excel</button>
     </header>
 
+    <div id="avisoRoadmap" class="aviso-ej" hidden></div>
     <div id="avisoEjemplo" class="aviso-ej" hidden>Estás viendo datos de ejemplo. Importa tus archivos o usa «Vaciar todo» cuando quieras quitarlos.</div>
 
     <div id="vacio" class="panel vacio-grande" hidden>
@@ -710,7 +714,7 @@ var state = {
   rd: [],            // Bees     (poc_external_id, status, volúmenes...)
   sic: {},           // SIC por fecha: { 'AAAA-MM-DD': { run, filas:[...] } }
   cerrados: [],      // días cerrados (no se tocan al importar)
-  cfg: { umbral: 10, amarillo: 9, minProy: 25, usarProy: false, manual: {}, empresas: {} },
+  cfg: { umbral: 10.5, tolerancia: 0.75, amarillo: 9.5, minProy: 25, usarProy: false, manual: {}, empresas: {} },
   geo: {},
   kml: { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }
 };
@@ -1082,19 +1086,24 @@ function construirUnificado() {
     var empresa = (hr && hr.empresa) || '';
     if (!empresa && vehiculo) empresa = empPorPlaca[placaClave(vehiculo)] || '';
     if (!empresa && ruta) empresa = empPorRuta[ruta] || '';
-    var vp = 0, ve = 0, vr = 0, estado = 'Pendiente', motivo = '', fuenteVol = rd ? 'bees' : '';
+    var vp = 0, ve = 0, vr = 0, estado = 'Pendiente', motivo = '', fuenteVol = '';
     if (rd) {
-      vp = (hr && hr.hlProgramado) || (rd.volumenProgramado || 0);
-      ve = rd.volumenEntregado || 0;
-      vr = rd.volumenRechazado || 0;
-      if (rd.status === 'PARTIAL_DELIVERY') { estado = 'Parcial'; vr = Math.max(0, vp - ve); }
-      else if (statusEsRechazo(rd.status)) { estado = 'Rechazado'; vr = vp; }
-      else if (rd.status === 'CONCLUDED') { estado = 'Entregado'; ve = vp; vr = 0; }
-      else if (ve > 0 && vr > 0) { estado = 'Parcial'; vr = Math.max(0, vp - ve); }
-      else if (vr > 0) { estado = 'Rechazado'; vr = vp; }
-      // los volúmenes se toman del Roadmap (Hl_Programado, HL_ENTR, HL_RECH) cuando el archivo los trae;
-      // Bees solo decide el estado del pedido
-      if (hr && hr.hlEntr !== null && hr.hlEntr !== undefined) { ve = hr.hlEntr || 0; vr = hr.hlRech || 0; fuenteVol = 'roadmap'; }
+      var bvp = rd.volumenProgramado || 0, bve = rd.volumenEntregado || 0, bvr = rd.volumenRechazado || 0;
+      // 1) el estado del pedido lo da Bees
+      if (rd.status === 'PARTIAL_DELIVERY') estado = 'Parcial';
+      else if (statusEsRechazo(rd.status)) estado = 'Rechazado';
+      else if (rd.status === 'CONCLUDED') estado = 'Entregado';
+      else if (bve > 0 && bvr > 0) estado = 'Parcial';
+      else if (bvr > 0) estado = 'Rechazado';
+      // 2) los volúmenes salen siempre del Roadmap (Hl_Programado, HL_ENTR, HL_RECH); nunca de Bees
+      if (hr) {
+        vp = hr.hlProgramado || 0;
+        if (hr.hlEntr !== null && hr.hlEntr !== undefined) { ve = hr.hlEntr || 0; vr = hr.hlRech || 0; }
+        else if (estado === 'Entregado') { ve = vp; vr = 0; }
+        else if (estado === 'Rechazado') { ve = 0; vr = vp; }
+        else if (estado === 'Parcial') { var fr = bvp > 0 ? Math.min(1, bve / bvp) : 0.5; ve = vp * fr; vr = vp - ve; }
+        fuenteVol = 'roadmap';
+      } else { fuenteVol = 'sin-roadmap'; }
       motivo = (hr && hr.motivoRechazo) || '';
     } else if (hr) {
       estado = 'Desplanificado';   // está en el Roadmap pero no en Bees
@@ -1120,11 +1129,12 @@ function construirUnificado() {
 
 var METAS = { mrVolumen: 2.5, mrPedido: 9 };
 
-function agregarPorRuta(lista) {
+function agregarPorRuta(lista, porViaje) {
   var mapa = {};
   lista.forEach(function (r) {
-    var k = r.ruta || '(Sin ruta)';
-    if (!mapa[k]) mapa[k] = { ruta: k, vehiculo: r.vehiculo, empresa: r.empresa, clientes: 0, entregados: 0, pendientes: 0,
+    var rb = r.ruta || '(Sin ruta)';
+    var k = porViaje ? rb + '||' + (r.viaje || '—') : rb;
+    if (!mapa[k]) mapa[k] = { ruta: rb, viaje: porViaje ? (r.viaje || '—') : '', vehiculo: r.vehiculo, empresa: r.empresa, clientes: 0, entregados: 0, pendientes: 0,
       parciales: 0, rechazados: 0, desplanificados: 0, volP: 0, volE: 0, volR: 0, volRTotal: 0 };
     var g = mapa[k];
     if (!g.vehiculo) g.vehiculo = r.vehiculo;
@@ -1147,7 +1157,7 @@ function agregarPorRuta(lista) {
     g.avanzados = g.clientes - g.pendientes - g.desplanificados;
     g.avancePct = g.clientes > 0 ? g.avanzados / g.clientes * 100 : 0;
     return g;
-  }).sort(function (a, b) { return a.ruta.localeCompare(b.ruta); });
+  }).sort(function (a, b) { return a.ruta.localeCompare(b.ruta) || String(a.viaje).localeCompare(String(b.viaje)); });
 }
 
 /* ---------- SIC: resumen por placa y día ---------- */
@@ -1183,10 +1193,12 @@ function resumenSicPorPlaca(fecha) {
 /* ---------- semáforo de Ruta SIF ---------- */
 function claveManual(fecha, ruta) { return fecha + '||' + ruta; }
 
+/* Ruta SIF = tiempo planeado (umbral) + tolerancia */
+function limiteSifH(c) { c = c || state.cfg; return (c.umbral || 0) + (c.tolerancia || 0); }
 function semaforoDe(horas) {
   var c = state.cfg;
   if (horas === null || horas === undefined) return 'gris';
-  if (horas > c.umbral) return 'rojo';
+  if (horas > limiteSifH(c)) return 'rojo';
   if (horas > c.amarillo) return 'amarillo';
   return 'verde';
 }
@@ -1242,9 +1254,9 @@ function calcularSif(fecha) {
       ruta: ruta, vehiculos: placas, placa: (lista.find(function (r) { return r.vehiculo; }) || {}).vehiculo || '',
       empresa: agg.empresa, viajes: viajes.sort(), agg: agg,
       sic: sic, fuente: fuente, enCD: enCD, iniSeg: iniSeg, retornoSeg: sic ? sic.retornoSeg : null, dist: sic ? sic.dist : null,
-      tmH: tmH, proyH: proy, riesgoProy: proy !== null && proy > cfg.umbral, manual: manual, refH: ref, tipo: tipo, semaforo: estadoSif,
-      limiteSeg: iniSeg !== null ? iniSeg + cfg.umbral * 3600 : null,
-      restanteH: tmH !== null ? cfg.umbral - tmH : null
+      tmH: tmH, proyH: proy, riesgoProy: proy !== null && proy > limiteSifH(cfg), manual: manual, refH: ref, tipo: tipo, semaforo: estadoSif,
+      limiteSeg: iniSeg !== null ? iniSeg + limiteSifH(cfg) * 3600 : null,
+      restanteH: tmH !== null ? limiteSifH(cfg) - tmH : null
     };
   });
 
@@ -1511,11 +1523,11 @@ function generarEjemplo() {
     var emp = empresas[i % empresas.length];
     var n = 22 + Math.floor(rnd() * 34);
     var avance, tm, ini, enCD = false;
-    if (tp === 'rojoCD') { tm = 10.6 + rnd() * 1.3; avance = 1; enCD = true; }
-    else if (tp === 'amarilloCD') { tm = 9.1 + rnd() * 0.8; avance = 1; enCD = true; }
+    if (tp === 'rojoCD') { tm = 11.4 + rnd() * 1.2; avance = 1; enCD = true; }
+    else if (tp === 'amarilloCD') { tm = 9.7 + rnd() * 1.3; avance = 1; enCD = true; }
     else if (tp === 'verdeCD') { tm = 7.2 + rnd() * 1.6; avance = 1; enCD = true; }
-    else if (tp === 'enRutaRojo') { tm = 10.2 + rnd() * 0.7; avance = 0.88 + rnd() * 0.08; }
-    else if (tp === 'enRutaAmarillo') { tm = 9.2 + rnd() * 0.6; avance = 0.8 + rnd() * 0.1; }
+    else if (tp === 'enRutaRojo') { tm = 11.3 + rnd() * 0.7; avance = 0.88 + rnd() * 0.08; }
+    else if (tp === 'enRutaAmarillo') { tm = 10.0 + rnd() * 0.8; avance = 0.8 + rnd() * 0.1; }
     else if (tp === 'enRutaVerde') { tm = 6.5 + rnd() * 1.8; avance = 0.7 + rnd() * 0.15; }
     else { tm = null; avance = 0.5; }
     if (tm !== null) {
@@ -1610,7 +1622,7 @@ function renderRail() {
   setEstado('est-kml', nk > 0, state.kml && state.kml.archivos.length ? state.kml.archivos.length + ' archivo(s) · ' + state.kml.archivos.reduce(function (a, x) { return a + x.puntos; }, 0) + ' puntos' : '');
   setEstado('est-bees', state.rd.length > 0, state.rd.length + ' registros · ' + new Set(state.rd.map(function (r) { return r.tourDate; })).size + ' día(s)');
 
-  $('cfgUmbral').value = state.cfg.umbral; $('cfgAmarillo').value = state.cfg.amarillo;
+  $('cfgUmbral').value = state.cfg.umbral; $('cfgTolerancia').value = Math.round((state.cfg.tolerancia || 0) * 60); $('cfgAmarillo').value = state.cfg.amarillo;
   $('cfgMinProy').value = state.cfg.minProy; $('cfgUsarProy').checked = !!state.cfg.usarProy;
 
   var codigos = Array.from(new Set(state.hr.map(function (r) { return r.empresa; }).filter(Boolean))).sort();
@@ -1630,6 +1642,13 @@ function setEstado(id, ok, texto) {
   e.classList.toggle('ok', ok);
 }
 
+function renderAvisoRoadmap() {
+  var el = $('avisoRoadmap'); if (!el) return;
+  var uni = hayDatos() ? datosDia() : [];
+  var sin = uni.filter(function (r) { return r.fuenteVol === 'sin-roadmap'; }).length;
+  el.hidden = !sin;
+  if (sin) el.textContent = 'Faltan datos del Roadmap: ' + sin + ' de ' + uni.length + ' clientes del ' + formatearFecha(fechaSel) + ' están en Bees pero no en el Roadmap importado. Su volumen programado, entregado y sus cajas salen en 0. Importa el Roadmap de ese día.';
+}
 function renderCabecera() {
   var d = fechaSel ? new Date(fechaSel + 'T12:00:00') : null;
   var dia = d ? d.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -1649,7 +1668,7 @@ function renderCabecera() {
 /* ---------------- Semáforo SIF ---------------- */
 var sifCache = null;
 function filaSifHtml(x, cfg) {
-  var pct = x.tmH !== null ? Math.min(100, x.tmH / cfg.umbral * 100) : 0;
+  var pct = x.tmH !== null ? Math.min(100, x.tmH / limiteSifH(cfg) * 100) : 0;
   var restante = x.restanteH;
   var estadoTxt = x.enCD ? 'En CD ' + fmtHora(x.retornoSeg) : (x.tmH !== null ? 'En ruta' : '—');
   var proy = x.proyH !== null ? '<span class="num ' + (x.riesgoProy ? 'rojo-txt' : '') + '">' + fmtHoras(x.proyH) + '</span>' : '<span class="txt-mut">—</span>';
@@ -1681,9 +1700,9 @@ function renderSif() {
       '<span class="bulb">' + n + '</span><span class="l1">' + l1 + '</span><span class="l2">' + l2 + '</span></button>';
   }
   $('signal').innerHTML =
-    lampara('rojo', 'Ruta SIF', 'más de ' + fmtNum(cfg.umbral, cfg.umbral % 1 ? 2 : 0) + ' h', res.rojo) +
-    lampara('amarillo', 'En riesgo', 'más de ' + fmtNum(cfg.amarillo, cfg.amarillo % 1 ? 2 : 0) + ' h', res.amarillo) +
-    lampara('verde', 'Normal', 'hasta ' + fmtNum(cfg.amarillo, cfg.amarillo % 1 ? 2 : 0) + ' h', res.verde) +
+    lampara('rojo', 'Ruta SIF', 'más de ' + fmtHoras(limiteSifH(cfg)), res.rojo) +
+    lampara('amarillo', 'En riesgo', 'de ' + fmtHoras(cfg.amarillo) + ' a ' + fmtHoras(limiteSifH(cfg)), res.amarillo) +
+    lampara('verde', 'Normal', 'hasta ' + fmtHoras(cfg.amarillo), res.verde) +
     lampara('gris', 'Sin datos', 'sin SIC ni Bees', res.gris);
 
   var conT = d.rutas.filter(function (x) { return x.tmH !== null; });
@@ -1695,9 +1714,9 @@ function renderSif() {
   $('kpisSif').innerHTML =
     '<div class="kpi"><span class="k-l">Rutas del día</span><span class="k-v">' + res.total + '</span><span class="k-s">' + res.retornaron + ' ya volvieron al CD</span></div>' +
     '<div class="kpi"><span class="k-l">Tiempo en mercado promedio</span><span class="k-v">' + fmtHoras(prom) + '</span><span class="k-s">' + conT.length + ' rutas con dato</span></div>' +
-    '<div class="kpi' + (mayor && mayor.tmH > cfg.umbral ? ' malo' : '') + '"><span class="k-l">Mayor tiempo</span><span class="k-v">' + (mayor ? fmtHoras(mayor.tmH) : '—') + '</span><span class="k-s">' + (mayor ? esc(mayor.ruta) + ' · ' + esc(mayor.placa) : 'sin datos') + '</span></div>' +
+    '<div class="kpi' + (mayor && mayor.tmH > limiteSifH(cfg) ? ' malo' : '') + '"><span class="k-l">Mayor tiempo</span><span class="k-v">' + (mayor ? fmtHoras(mayor.tmH) : '—') + '</span><span class="k-s">' + (mayor ? esc(mayor.ruta) + ' · ' + esc(mayor.placa) : 'sin datos') + '</span></div>' +
     '<div class="kpi"><span class="k-l">Avance de clientes</span><span class="k-v">' + fmtPct(cli ? avz / cli * 100 : 0) + '</span><span class="k-s">' + avz + ' de ' + cli + ' clientes</span></div>' +
-    '<div class="kpi' + (riesgoPry ? ' malo' : '') + '"><span class="k-l">Alerta por ritmo</span><span class="k-v">' + riesgoPry + '</span><span class="k-s">proyectan pasar de ' + fmtNum(cfg.umbral, cfg.umbral % 1 ? 2 : 0) + ' h</span></div>';
+    '<div class="kpi' + (riesgoPry ? ' malo' : '') + '"><span class="k-l">Alerta por ritmo</span><span class="k-v">' + riesgoPry + '</span><span class="k-s">proyectan pasar de ' + fmtHoras(limiteSifH(cfg)) + '</span></div>';
 
   poblarOpciones($('fsEmpresa'), 'Todas las empresas', Array.from(new Set(d.rutas.map(function (x) { return x.empresa; }).filter(Boolean))).sort(), nombreEmpresa, d.rutas.some(function (x) { return !x.empresa; }));
 
@@ -1748,6 +1767,11 @@ var pluginSif = {
       var xl = x.getPixelForValue(f.ini + m.umbral);
       ctx.strokeStyle = m.colTexto; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(xl, py - 9); ctx.lineTo(xl, py + 9); ctx.stroke();
+      if (m.plan) {
+        var xq = x.getPixelForValue(f.ini + m.plan);
+        ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]);
+        ctx.beginPath(); ctx.moveTo(xq, py - 8); ctx.lineTo(xq, py + 8); ctx.stroke(); ctx.setLineDash([]);
+      }
       if (f.proy !== null) {
         var xp = x.getPixelForValue(Math.min(f.ini + f.proy, x.max));
         ctx.strokeStyle = m.colTexto; ctx.fillStyle = m.colFondo; ctx.lineWidth = 1.6;
@@ -1761,14 +1785,14 @@ var pluginSif = {
 function colSem(s) { return { rojo: cssVar('--bad'), amarillo: cssVar('--warn-fill'), verde: cssVar('--ok'), gris: cssVar('--none') }[s]; }
 
 function renderTimeline(lista, d) {
-  var cfg = state.cfg, U = cfg.umbral;
+  var cfg = state.cfg, U = limiteSifH(cfg);
   var filas = lista.filter(function (x) { return x.iniSeg !== null && x.tmH !== null; }).map(function (x) {
     return { x: x, ruta: x.ruta, ini: x.iniSeg / 3600, tm: x.tmH, proy: x.proyH };
   });
   filas.sort(function (a, b) { return ORDEN_SEM[a.x.semaforo] - ORDEN_SEM[b.x.semaforo] || b.tm - a.tm; });
   var box = $('boxTimeline'), cv = $('cvTimeline');
   if (chartTL) { chartTL.destroy(); chartTL = null; }
-  $('notaTimeline').textContent = filas.length ? 'La marca vertical de cada barra es el límite: salida + ' + fmtNum(U, U % 1 ? 2 : 0) + ' h.' : '';
+  $('notaTimeline').textContent = filas.length ? 'La marca vertical continua de cada barra es el límite de Ruta SIF: salida + ' + fmtHoras(cfg.umbral) + (cfg.tolerancia ? ' + ' + Math.round(cfg.tolerancia * 60) + ' min de tolerancia = ' + fmtHoras(U) : '') + (cfg.tolerancia ? '. La marca punteada es el tiempo planeado (' + fmtHoras(cfg.umbral) + ').' : '.') : '';
   $('leyTimeline').innerHTML = filas.length ?
     '<span><i class="sw" style="background:' + cssVar('--ok') + '"></i>Tiempo transcurrido (color del semáforo)</span>' +
     '<span><i class="sw" style="background:' + cssVar('--track') + '"></i>Tiempo disponible hasta el límite</span>' +
@@ -1819,7 +1843,7 @@ function renderTimeline(lista, d) {
     },
     plugins: [pluginSif]
   });
-  chartTL.$sif = { filas: filas, umbral: U, runH: runH, colTexto: cssVar('--ink'), colFondo: cssVar('--surface'), colAhora: cssVar('--accent') };
+  chartTL.$sif = { filas: filas, umbral: U, plan: cfg.tolerancia ? cfg.umbral : null, runH: runH, colTexto: cssVar('--ink'), colFondo: cssVar('--surface'), colAhora: cssVar('--accent') };
   chartTL.draw();
 }
 
@@ -1875,18 +1899,19 @@ function renderAvance() {
   }).join('');
 
   // tabla por ruta
-  var porRuta = agregarPorRuta(porRutaUni);
+  var porRuta = agregarPorRuta(porRutaUni, true);
   var semPorRuta = {};
   (sifCache && sifCache.fecha === fechaSel ? sifCache.rutas : calcularSif(fechaSel).rutas).forEach(function (x) { semPorRuta[x.ruta] = x.semaforo; });
-  $('contAv').textContent = porRuta.length + ' ruta' + (porRuta.length === 1 ? '' : 's') + ' · clic en una fila para ver sus clientes';
+  $('contAv').textContent = porRuta.length + ' fila' + (porRuta.length === 1 ? '' : 's') + ' (una por ruta y viaje) · clic para ver sus clientes';
   var clientesPorRuta = {};
-  porRutaUni.forEach(function (r) { var k = r.ruta || '(Sin ruta)'; (clientesPorRuta[k] = clientesPorRuta[k] || []).push(r); });
-  var html = '<thead><tr><th>Ruta</th><th>SIF</th><th>Placa</th><th class="r">Clientes</th><th style="min-width:150px">Avance</th><th class="r">Entreg.</th><th class="r">Pend.</th><th class="r">Parc.</th><th class="r">Rech.</th><th class="r">Desplan.</th><th class="r">Vol. prog.</th><th class="r">Vol. entreg.</th><th class="r">Vol. rech.</th><th class="r">MR% vol.</th><th class="r">MR% ped.</th></tr></thead><tbody>';
-  if (!porRuta.length) html += '<tr><td colspan="15" class="vacio">Sin datos de avance para esta fecha.</td></tr>';
+  porRutaUni.forEach(function (r) { var k = (r.ruta || '(Sin ruta)') + '||' + (r.viaje || '—'); (clientesPorRuta[k] = clientesPorRuta[k] || []).push(r); });
+  var html = '<thead><tr><th>Ruta</th><th>Viaje</th><th>SIF</th><th>Placa</th><th class="r">Clientes</th><th style="min-width:150px">Avance</th><th class="r">Entreg.</th><th class="r">Pend.</th><th class="r">Parc.</th><th class="r">Rech.</th><th class="r">Desplan.</th><th class="r">Vol. prog.</th><th class="r">Vol. entreg.</th><th class="r">Vol. rech.</th><th class="r">MR% vol.</th><th class="r">MR% ped.</th></tr></thead><tbody>';
+  if (!porRuta.length) html += '<tr><td colspan="16" class="vacio">Sin datos de avance para esta fecha.</td></tr>';
   porRuta.forEach(function (g) {
     var s = semPorRuta[g.ruta];
-    var abierta = !!expandidas[g.ruta];
-    html += '<tr class="fila-click" data-av="' + esc(g.ruta) + '"><td><span class="cel-ruta">' + (abierta ? '▾ ' : '▸ ') + esc(g.ruta) + '</span></td>' +
+    var kAv = g.ruta + '||' + g.viaje;
+    var abierta = !!expandidas[kAv];
+    html += '<tr class="fila-click" data-av="' + esc(kAv) + '"><td><span class="cel-ruta">' + (abierta ? '▾ ' : '▸ ') + esc(g.ruta) + '</span></td><td class="num"><span class="etq-v">V' + esc(g.viaje) + '</span></td>' +
       '<td>' + (s ? '<span class="etq ' + s + '"><i></i>' + SEM[s] + '</span>' : '<span class="txt-mut">—</span>') + '</td>' +
       '<td class="num">' + esc(g.vehiculo) + '</td><td class="r num">' + g.clientes + '</td>' +
       '<td><div class="t-celda">' + segHtml(g) + '<span class="num">' + fmtPct(g.avancePct) + ' <span class="txt-mut">(' + g.avanzados + '/' + g.clientes + ')</span></span></div></td>' +
@@ -1894,8 +1919,8 @@ function renderAvance() {
       '<td class="r num">' + fmtHl(g.volP) + '</td><td class="r num txt-ok">' + fmtHl(g.volE) + '</td><td class="r num txt-bad">' + fmtHl(g.volRTotal) + '</td>' +
       '<td class="r num ' + (g.mrVolumen <= METAS.mrVolumen ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrVolumen) + '</td><td class="r num ' + (g.mrPedido <= METAS.mrPedido ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrPedido) + '</td></tr>';
     if (abierta) {
-      html += '<tr class="detalle-fila"><td colspan="15"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
-        (clientesPorRuta[g.ruta] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + fmtHl(r.volumenRechazado) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>'; }).join('') +
+      html += '<tr class="detalle-fila"><td colspan="16"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
+        (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + fmtHl(r.volumenRechazado) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>'; }).join('') +
         '</tbody></table></div></td></tr>';
     }
   });
@@ -1913,11 +1938,11 @@ function renderAvance() {
 function renderClientes(lista) {
   $('contCli').textContent = lista.length + ' cliente' + (lista.length === 1 ? '' : 's');
   var corte = lista.slice(0, limiteCli);
-  $('tablaCli').innerHTML = '<thead><tr><th>Ruta</th><th>Empresa</th><th>Código</th><th>Cliente</th><th>Placa</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
+  $('tablaCli').innerHTML = '<thead><tr><th>Ruta</th><th>Viaje</th><th>Empresa</th><th>Código</th><th>Cliente</th><th>Placa</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
     (corte.length ? corte.map(function (r) {
-      return '<tr><td><span class="cel-ruta">' + esc(r.ruta || '(Sin ruta)') + '</span></td><td>' + esc(nombreEmpresa(r.empresa)) + '</td><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td class="num">' + esc(r.vehiculo) + '</td><td>' + etqEstado(r.estado) +
+      return '<tr><td><span class="cel-ruta">' + esc(r.ruta || '(Sin ruta)') + '</span></td><td class="num">' + esc(r.viaje || '—') + '</td><td>' + esc(nombreEmpresa(r.empresa)) + '</td><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td class="num">' + esc(r.vehiculo) + '</td><td>' + etqEstado(r.estado) +
         '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + fmtHl(r.volumenRechazado) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>';
-    }).join('') : '<tr><td colspan="10" class="vacio">No hay clientes con estos filtros.</td></tr>') + '</tbody>';
+    }).join('') : '<tr><td colspan="11" class="vacio">No hay clientes con estos filtros.</td></tr>') + '</tbody>';
   $('btnMasCli').hidden = lista.length <= limiteCli;
   $('btnMasCli').onclick = function () { limiteCli += 300; renderClientes(lista); };
 }
@@ -1934,7 +1959,7 @@ function abrirRuta(ruta) {
     '<div class="tiles">' +
     tile('Salida', fmtHora(x.iniSeg), x.fuente ? 'fuente: ' + x.fuente : 'sin dato') +
     tile('Tiempo en mercado', fmtHoras(x.tmH), x.enCD ? 'volvió al CD a las ' + fmtHora(x.retornoSeg) : 'sigue en ruta') +
-    tile('Límite', fmtHora(x.limiteSeg), 'salida + ' + fmtNum(cfg.umbral, cfg.umbral % 1 ? 2 : 0) + ' h') +
+    tile('Límite', fmtHora(x.limiteSeg), 'salida + ' + fmtHoras(cfg.umbral) + (cfg.tolerancia ? ' + ' + Math.round(cfg.tolerancia * 60) + ' min' : '')) +
     tile('Proyección por ritmo', x.proyH !== null ? fmtHoras(x.proyH) : '—', x.proyH !== null ? 'con ' + fmtPct(x.agg.avancePct) + ' de avance' : (x.enCD ? 'la ruta ya retornó' : 'avance menor a ' + cfg.minProy + '%')) +
     tile('Distancia', x.dist !== null ? fmtNum(x.dist, 1) + ' km' : '—', '') + '</div>';
   if (ev.length) {
@@ -1984,7 +2009,7 @@ function armarRutasMapa() {
   var uni = datosDia();
   var porRuta = {};
   uni.forEach(function (r) {
-    var k = r.ruta || '(Sin ruta)';
+    var k = (r.ruta || '(Sin ruta)') + (r.viaje ? ' · V' + r.viaje : '');
     (porRuta[k] = porRuta[k] || []).push(r);
   });
   var out = Object.keys(porRuta).sort().map(function (k) {
@@ -2806,15 +2831,15 @@ function ordenarPend(lista, modo) {
 }
 function sumaPend(l) { return { hl: l.reduce(function (a, r) { return a + (r.volumenProgramado || 0); }, 0), cj: l.reduce(function (a, r) { return a + (r.entregaCjs || 0); }, 0) }; }
 function filaBase(r) {
-  return '<td><span class="cel-ruta">' + esc(r.ruta || '(Sin ruta)') + '</span></td><td>' + esc(nombreEmpresa(r.empresa)) + '</td><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td>';
+  return '<td><span class="cel-ruta">' + esc(r.ruta || '(Sin ruta)') + '</span></td><td class="num">' + esc(r.viaje || '—') + '</td><td>' + esc(nombreEmpresa(r.empresa)) + '</td><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td>';
 }
 function tablaPend(idTabla, lista, extraTh, extraTd) {
   var s = sumaPend(lista), MAX = 600;
-  var head = '<thead><tr><th>Ruta</th><th>Empresa</th><th>Código</th><th>Cliente</th>' + extraTh + '<th class="r">Volumen</th><th class="r">Cajas</th></tr></thead>';
+  var head = '<thead><tr><th>Ruta</th><th>Viaje</th><th>Empresa</th><th>Código</th><th>Cliente</th>' + extraTh + '<th class="r">Volumen</th><th class="r">Cajas</th></tr></thead>';
   var cuerpo = lista.slice(0, MAX).map(function (r) {
     return '<tr>' + filaBase(r) + extraTd(r) + '<td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num">' + fmtCjs(r.entregaCjs) + '</td></tr>';
   }).join('');
-  var cols = 4 + (extraTh.match(/<th/g) || []).length;
+  var cols = 5 + (extraTh.match(/<th/g) || []).length;
   var pie = lista.length ? '<tfoot><tr><td colspan="' + cols + '"><b>Total · ' + lista.length + ' clientes' + (lista.length > MAX ? ' (se muestran los primeros ' + MAX + ')' : '') + '</b></td><td class="r num"><b>' + fmtHl(s.hl) + '</b></td><td class="r num"><b>' + fmtCjs(s.cj) + '</b></td></tr></tfoot>' : '';
   $(idTabla).innerHTML = lista.length ? head + '<tbody>' + cuerpo + '</tbody>' + pie : '<tbody><tr><td class="vacio-fila">Sin clientes para mostrar.</td></tr></tbody>';
 }
@@ -2850,7 +2875,7 @@ function exportarPend(cual) {
   else { lista = ordenarPend(L.noAlert, $('opOrden3').value); nombre = 'Sin alerta'; }
   if (!lista.length) { avisar('No hay clientes para exportar.', true); return; }
   var filas = lista.map(function (r) {
-    return { 'Ruta': r.ruta, 'Empresa': nombreEmpresa(r.empresa), 'Código': r.codigo, 'Cliente': r.cliente, 'Estado en Bees': statusBeesTxt(r), 'Estado': r.estado,
+    return { 'Ruta': r.ruta, 'Viaje': r.viaje || '', 'Empresa': nombreEmpresa(r.empresa), 'Código': r.codigo, 'Cliente': r.cliente, 'Estado en Bees': statusBeesTxt(r), 'Estado': r.estado,
       'Volumen (hl)': +(r.volumenProgramado || 0).toFixed(3), 'Cajas': r.entregaCjs || 0, 'Alerta': r.alerta ? 'Sí' : 'No',
       'Hora alerta': r.fechaAlerta ? hhmm(r.fechaAlerta) : '', 'Motivo': r.motivoRechazo || '', 'Retroalimentación': r.retro || '' };
   });
@@ -2885,14 +2910,14 @@ function exportarExcel() {
   });
   var ws1 = XLSX.utils.json_to_sheet(s1); ws1['!cols'] = [8, 11, 30, 10, 8, 8, 12, 8, 10, 9, 9, 12, 14, 14, 8].map(function (w) { return { wch: w }; });
   XLSX.utils.book_append_sheet(wb, ws1, 'Semáforo SIF');
-  var s2 = agregarPorRuta(uni).map(function (g) {
-    return { 'Ruta': g.ruta, 'Placa': g.vehiculo, 'Empresa': nombreEmpresa(g.empresa), 'Clientes': g.clientes, 'Avance %': +g.avancePct.toFixed(1), 'Entregados': g.entregados, 'Pendientes': g.pendientes, 'Parciales': g.parciales,
+  var s2 = agregarPorRuta(uni, true).map(function (g) {
+    return { 'Ruta': g.ruta, 'Viaje': g.viaje, 'Placa': g.vehiculo, 'Empresa': nombreEmpresa(g.empresa), 'Clientes': g.clientes, 'Avance %': +g.avancePct.toFixed(1), 'Entregados': g.entregados, 'Pendientes': g.pendientes, 'Parciales': g.parciales,
       'Rechazados': g.rechazados, 'Desplanificados': g.desplanificados, 'Vol. programado (hl)': +g.volP.toFixed(3), 'Vol. entregado (hl)': +g.volE.toFixed(3), 'Vol. rechazado (hl)': +g.volRTotal.toFixed(3), 'MR% volumen': +g.mrVolumen.toFixed(2), 'MR% pedido': +g.mrPedido.toFixed(2) };
   });
-  var ws2 = XLSX.utils.json_to_sheet(s2); ws2['!cols'] = [8, 10, 30, 9, 9, 10, 10, 9, 10, 14, 16, 16, 16, 12, 11].map(function (w) { return { wch: w }; });
+  var ws2 = XLSX.utils.json_to_sheet(s2); ws2['!cols'] = [8, 7, 10, 30, 9, 9, 10, 10, 9, 10, 14, 16, 16, 16, 12, 11].map(function (w) { return { wch: w }; });
   XLSX.utils.book_append_sheet(wb, ws2, 'Avance por ruta');
-  var s3 = uni.map(function (r) { return { 'Fecha': formatearFecha(r.fecha), 'Ruta': r.ruta, 'Placa': r.vehiculo, 'Código': r.codigo, 'Cliente': r.cliente, 'Estado': r.estado, 'Vol. programado (hl)': r.volumenProgramado, 'Vol. entregado (hl)': r.volumenEntregado, 'Vol. rechazado (hl)': r.volumenRechazado, 'Motivo': r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '' }; });
-  var ws3 = XLSX.utils.json_to_sheet(s3); ws3['!cols'] = [11, 8, 10, 12, 36, 14, 16, 16, 16, 24].map(function (w) { return { wch: w }; });
+  var s3 = uni.map(function (r) { return { 'Fecha': formatearFecha(r.fecha), 'Ruta': r.ruta, 'Viaje': r.viaje || '', 'Placa': r.vehiculo, 'Código': r.codigo, 'Cliente': r.cliente, 'Estado': r.estado, 'Vol. programado (hl)': r.volumenProgramado, 'Vol. entregado (hl)': r.volumenEntregado, 'Vol. rechazado (hl)': r.volumenRechazado, 'Motivo': r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '' }; });
+  var ws3 = XLSX.utils.json_to_sheet(s3); ws3['!cols'] = [11, 8, 7, 10, 12, 36, 14, 16, 16, 16, 24].map(function (w) { return { wch: w }; });
   XLSX.utils.book_append_sheet(wb, ws3, 'Detalle clientes');
   XLSX.writeFile(wb, 'DABRIXO_rutas_' + fechaSel + '.xlsx');
   avisar('Excel exportado: DABRIXO_rutas_' + fechaSel + '.xlsx');
@@ -2907,6 +2932,7 @@ function copiaJson() {
 function refrescar(forzar) {
   renderRail();
   renderCabecera();
+  renderAvisoRoadmap();
   var vacio = !hayDatos();
   $('vacio').hidden = !vacio;
   $('contenido').hidden = vacio;
@@ -2980,14 +3006,15 @@ function wire() {
     guardar(); renderSif(); renderAvance();
   });
   function cfgCambio() {
-    var u = convertirNumero($('cfgUmbral').value), a = convertirNumero($('cfgAmarillo').value), p = convertirNumero($('cfgMinProy').value);
+    var u = convertirNumero($('cfgUmbral').value), a = convertirNumero($('cfgAmarillo').value), p = convertirNumero($('cfgMinProy').value), t = convertirNumero($('cfgTolerancia').value);
     if (u !== null && u > 0) state.cfg.umbral = u;
+    if (t !== null && t >= 0) state.cfg.tolerancia = t / 60;
     if (a !== null && a > 0) state.cfg.amarillo = Math.min(a, state.cfg.umbral);
     if (p !== null && p > 0) state.cfg.minProy = p;
     state.cfg.usarProy = $('cfgUsarProy').checked;
     guardar(); refrescar(true);
   }
-  ['cfgUmbral', 'cfgAmarillo', 'cfgMinProy', 'cfgUsarProy'].forEach(function (id) { $(id).addEventListener('change', cfgCambio); });
+  ['cfgUmbral', 'cfgTolerancia', 'cfgAmarillo', 'cfgMinProy', 'cfgUsarProy'].forEach(function (id) { $(id).addEventListener('change', cfgCambio); });
   $('btnCerrarDia').addEventListener('click', function () {
     var f = $('selCerrar').value; if (!f) return;
     confirmar('Cerrar día', 'El ' + formatearFecha(f) + ' quedará congelado: si importas un archivo con esa fecha, se ignorará. Puedes reabrirlo cuando quieras.', 'Cerrar día').then(function (ok) {
@@ -3007,7 +3034,7 @@ function wire() {
       var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros Roadmap, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
       state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
-      state.cfg = Object.assign({ umbral: 10, amarillo: 9, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {});
+      state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0.75, amarillo: 9.5, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Copia restaurada.');
     } catch (err) { avisar('No se pudo restaurar: ' + err.message, true); }
   });
@@ -3051,13 +3078,17 @@ function wire() {
   }
 }
 
+/* Datos guardados con los parámetros anteriores (10 h, sin tolerancia): pasan a 10 h 30 m + 45 min */
+function migrarCfg(guardado) {
+  if (guardado && guardado.tolerancia === undefined) { state.cfg.umbral = 10.5; state.cfg.tolerancia = 0.75; state.cfg.amarillo = 9.5; }
+}
 async function iniciar() {
   wire();
   var ok = await DB.abrir();
   var g = await DB.get('estado');
   if (g && g.hr && g.rd) {
     state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
-    state.cfg = Object.assign(state.cfg, g.cfg || {});
+    state.cfg = Object.assign(state.cfg, g.cfg || {}); migrarCfg(g.cfg);
     state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
   }
   invalidar();
