@@ -410,6 +410,17 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
 .btn-ic.mal { color: #b3261e; border-color: #e5b9b5; }
 .acc-fila { white-space: nowrap; text-align: right; }
 
+.ms { position: relative; display: inline-block; }
+.ms-btn { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; cursor: pointer; }
+.ms-btn:hover { background: var(--surface-2); }
+.ms-panel { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 240px; max-height: 300px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 6px; }
+.ms-acc { display: flex; gap: 6px; padding: 2px 2px 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.ms-acc button { font: inherit; font-size: 12px; border: 0; background: none; color: var(--accent, #1f6feb); cursor: pointer; padding: 2px 6px; }
+.ms-op { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.ms-op:hover { background: var(--surface-2); }
+.ms-op span { flex: 1; }
+.ms-op small { color: var(--ink-3, #7a8594); }
+
 </style>
 </head>
 <body>
@@ -630,17 +641,17 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
         <div class="tiles tiles3" id="tilesPend"></div>
         <div class="panel">
           <div class="panel-h"><div><h2>Clientes pendientes de entregar</h2><p>Volumen del Roadmap y cajas («Entrega Cjs»). No incluye los desplanificados.</p></div><span class="txt-mut" id="cntPend"></span></div>
-          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden1"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><button class="btn chico" type="button" data-exp-pend="pend">Exportar a Excel</button></div>
+          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden1"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><span class="ms" id="ms-pend"></span><button class="btn chico" type="button" data-exp-pend="pend">Exportar a Excel</button></div>
           <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaPend"></table></div>
         </div>
         <div class="panel">
           <div class="panel-h"><div><h2>Alertas del Roadmap</h2><p>Clientes con alerta registrada en el Roadmap, del mayor al menor volumen.</p></div><span class="txt-mut" id="cntAlert"></span></div>
-          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden2"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><button class="btn chico" type="button" data-exp-pend="alert">Exportar a Excel</button></div>
+          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden2"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><span class="ms" id="ms-alert"></span><button class="btn chico" type="button" data-exp-pend="alert">Exportar a Excel</button></div>
           <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaAlert"></table></div>
         </div>
         <div class="panel">
           <div class="panel-h"><div><h2>Rechazados o modificados parcialmente sin alerta</h2><p>Según Bees: rechazados o con entrega parcial que no tienen alerta en el Roadmap.</p></div><span class="txt-mut" id="cntNoAlert"></span></div>
-          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden3"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><button class="btn chico" type="button" data-exp-pend="noalert">Exportar a Excel</button></div>
+          <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden3"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><span class="ms" id="ms-noalert"></span><button class="btn chico" type="button" data-exp-pend="noalert">Exportar a Excel</button></div>
           <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaNoAlert"></table></div>
         </div>
       </section>
@@ -2902,6 +2913,24 @@ function listasPend() {
     todos: l
   };
 }
+/* filtro multiselección por «Estado en Bees» (uno por tabla) */
+var selEstBees = { pend: null, alert: null, noalert: null }, msAbierto = '';
+function aplicarEst(cual, lista) {
+  var sel = selEstBees[cual];
+  return sel ? lista.filter(function (r) { return sel.indexOf(statusBeesTxt(r)) !== -1; }) : lista;
+}
+function renderMs(cual, base) {
+  var el = $('ms-' + cual); if (!el) return;
+  var cnt = {}; base.forEach(function (r) { var t = statusBeesTxt(r); cnt[t] = (cnt[t] || 0) + 1; });
+  var opts = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; });
+  var sel = selEstBees[cual] ? selEstBees[cual].filter(function (t) { return cnt[t]; }) : null;
+  if (sel && !sel.length) sel = null;
+  selEstBees[cual] = sel;
+  var txt = !sel ? 'Todos' : (sel.length === 1 ? sel[0] : sel.length + ' seleccionados');
+  el.innerHTML = '<button type="button" class="ms-btn" data-ms-t="' + cual + '">Estado en Bees: <b>' + esc(txt) + '</b> ▾</button>' +
+    (msAbierto === cual ? '<div class="ms-panel"><div class="ms-acc"><button type="button" data-ms-todos="' + cual + '">Todos</button><button type="button" data-ms-ninguno="' + cual + '">Limpiar</button></div>' +
+      (opts.length ? opts.map(function (t) { return '<label class="ms-op"><input type="checkbox" data-ms-op="' + cual + '" value="' + esc(t) + '"' + (!sel || sel.indexOf(t) !== -1 ? ' checked' : '') + '> <span>' + esc(t) + '</span> <small>' + cnt[t] + '</small></label>'; }).join('') : '<div class="txt-mut" style="padding:6px 8px">Sin clientes</div>') + '</div>' : '');
+}
 function ordenarPend(lista, modo) {
   var l = lista.slice();
   if (modo === 'cajas') l.sort(function (a, b) { return (b.entregaCjs || 0) - (a.entregaCjs || 0) || (b.volumenProgramado || 0) - (a.volumenProgramado || 0); });
@@ -2925,6 +2954,8 @@ function tablaPend(idTabla, lista, extraTh, extraTd) {
 }
 function renderPend() {
   var L = listasPend();
+  renderMs('pend', L.pend); renderMs('alert', L.alert); renderMs('noalert', L.noAlert);
+  L.pend = aplicarEst('pend', L.pend); L.alert = aplicarEst('alert', L.alert); L.noAlert = aplicarEst('noalert', L.noAlert);
   var sp = sumaPend(L.pend), sa = sumaPend(L.alert), sn = sumaPend(L.noAlert);
   $('tilesPend').innerHTML =
     tile('Pendientes de entregar', L.pend.length, fmtHl(sp.hl) + ' · ' + fmtCjs(sp.cj) + ' cajas', '--c-pendiente') +
@@ -2950,6 +2981,7 @@ function renderPend() {
 }
 function exportarPend(cual) {
   var L = listasPend(), lista, orden, nombre;
+  L.pend = aplicarEst('pend', L.pend); L.alert = aplicarEst('alert', L.alert); L.noAlert = aplicarEst('noalert', L.noAlert);
   if (cual === 'pend') { lista = ordenarPend(L.pend, $('opOrden1').value); nombre = 'Pendientes'; }
   else if (cual === 'alert') { lista = ordenarPend(L.alert, $('opOrden2').value); nombre = 'Alertas'; }
   else { lista = ordenarPend(L.noAlert, $('opOrden3').value); nombre = 'Sin alerta'; }
@@ -2967,6 +2999,24 @@ function exportarPend(cual) {
 function wirePend() {
   ['fpEmpresa', 'fpRuta', 'opOrden1', 'opOrden2', 'opOrden3'].forEach(function (id) { $(id).addEventListener('change', renderPend); });
   $('fpTexto').addEventListener('input', renderPend);
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-ms-t]');
+    if (t) { var c = t.getAttribute('data-ms-t'); msAbierto = msAbierto === c ? '' : c; renderPend(); return; }
+    var td = e.target.closest('[data-ms-todos]');
+    if (td) { selEstBees[td.getAttribute('data-ms-todos')] = null; renderPend(); return; }
+    var tn = e.target.closest('[data-ms-ninguno]');
+    if (tn) { selEstBees[tn.getAttribute('data-ms-ninguno')] = null; msAbierto = ''; renderPend(); return; }
+    if (msAbierto && !e.target.closest('.ms-panel')) { msAbierto = ''; renderPend(); }
+  });
+  document.addEventListener('change', function (e) {
+    var o = e.target.closest('[data-ms-op]'); if (!o) return;
+    var c = o.getAttribute('data-ms-op');
+    var todos = Array.prototype.map.call(document.querySelectorAll('#ms-' + c + ' [data-ms-op]'), function (x) { return x.value; });
+    var marc = Array.prototype.filter.call(document.querySelectorAll('#ms-' + c + ' [data-ms-op]'), function (x) { return x.checked; }).map(function (x) { return x.value; });
+    selEstBees[c] = marc.length === todos.length ? null : (marc.length ? marc : null);
+    if (!marc.length) selEstBees[c] = [];   // nada marcado: tabla vacía
+    renderPend();
+  });
   document.querySelectorAll('[data-exp-pend]').forEach(function (b) { b.addEventListener('click', function () { exportarPend(b.getAttribute('data-exp-pend')); }); });
 }
 
