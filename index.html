@@ -749,6 +749,13 @@ function convertirFecha(v) {
   if (iso) return iso[1] + '-' + pad2(+iso[2]) + '-' + pad2(+iso[3]);
   var m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (m) return m[3] + '-' + pad2(+m[2]) + '-' + pad2(+m[1]);
+  var m2 = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})(?!\d)/);   // 23/10/26
+  if (m2) return '20' + m2[3] + '-' + pad2(+m2[2]) + '-' + pad2(+m2[1]);
+  var m3 = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);                      // 23.10.2026
+  if (m3) return m3[3] + '-' + pad2(+m3[2]) + '-' + pad2(+m3[1]);
+  var MES = { ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, set: 9, sep: 9, oct: 10, nov: 11, dic: 12, dec: 12 };
+  var m4 = t.toLowerCase().match(/^(\d{1,2})[\s\-\/]+([a-záéíóú]{3})[a-záéíóú]*\.?[\s\-\/,]+(?:de\s+)?(\d{4})/);   // 23 oct 2026
+  if (m4 && MES[m4[2].slice(0, 3)]) return m4[3] + '-' + pad2(MES[m4[2].slice(0, 3)]) + '-' + pad2(+m4[1]);
   return '';
 }
 function convertirNumero(v) {
@@ -1474,6 +1481,11 @@ async function importarArchivos(files, tipo) {
     lista.forEach(function (res) {
       var det = lista.length === 1 && res.tipo !== tipo ? ' (detecté que era ' + NOM_TIPO[res.tipo] + ')' : '';
       if (res.tipo === 'roadmap') {
+        var sinF = res.datos.filter(function (r) { return !r.fecha; });
+        if (sinF.length) {   // el Roadmap no trae fecha legible: se asume la del día cargado en Bees/SIC
+          var fdef = fechaSel || (state.rd.length ? state.rd[state.rd.length - 1].tourDate : '') || Object.keys(state.sic).sort().pop() || '';
+          if (fdef) { sinF.forEach(function (r) { r.fecha = fdef; }); resumen.push(sinF.length + ' filas del Roadmap no traían fecha: se asignó ' + formatearFecha(fdef)); }
+        }
         var m = combinar(state.hr, res.datos, function (r) { return r.fecha || ''; });
         state.hr = m.lista;
         res.datos.forEach(function (r) { if (r.fecha) fechasNuevas.push(r.fecha); });
@@ -1642,12 +1654,17 @@ function setEstado(id, ok, texto) {
   e.classList.toggle('ok', ok);
 }
 
+function diagRoadmap() {
+  if (!state.hr.length) return 'No hay ningún registro de Roadmap cargado: súbelo con «Roadmap» (Excel con las columnas Ruta, Código, Hl_Programado…).';
+  var c = {}; state.hr.forEach(function (r) { var f = r.fecha || 'sin fecha'; c[f] = (c[f] || 0) + 1; });
+  return 'El Roadmap cargado tiene ' + Object.keys(c).sort().map(function (f) { return c[f] + ' registros del ' + (f === 'sin fecha' ? f : formatearFecha(f)); }).join(', ') + '. Importa el Roadmap del ' + formatearFecha(fechaSel) + ' (o revisa la columna Fecha).';
+}
 function renderAvisoRoadmap() {
   var el = $('avisoRoadmap'); if (!el) return;
   var uni = hayDatos() ? datosDia() : [];
   var sin = uni.filter(function (r) { return r.fuenteVol === 'sin-roadmap'; }).length;
   el.hidden = !sin;
-  if (sin) el.textContent = 'Faltan datos del Roadmap: ' + sin + ' de ' + uni.length + ' clientes del ' + formatearFecha(fechaSel) + ' están en Bees pero no en el Roadmap importado. Su volumen programado, entregado y sus cajas salen en 0. Importa el Roadmap de ese día.';
+  if (sin) el.textContent = 'Faltan datos del Roadmap: ' + sin + ' de ' + uni.length + ' clientes del ' + formatearFecha(fechaSel) + ' están en Bees pero no en el Roadmap importado. Su volumen programado, entregado y sus cajas salen en 0. ' + diagRoadmap();
 }
 function renderCabecera() {
   var d = fechaSel ? new Date(fechaSel + 'T12:00:00') : null;
