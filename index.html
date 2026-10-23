@@ -1038,11 +1038,31 @@ function statusEsRechazo(s) {
 var _cacheUni = null;
 function invalidar() { _cacheUni = null; }
 
+/* Si la fecha del Roadmap no coincide con la de Bees pero los clientes sí (mismo reparto, fecha de generación distinta),
+   el Roadmap se cruza con el día de Bees que más clientes comparte. */
+var remapFechasHR = {};
+function calcularRemapFechas() {
+  var cr = {}, cb = {}, mapa = {};
+  state.hr.forEach(function (r) { if (r.codigo && r.fecha) (cr[r.fecha] = cr[r.fecha] || {})[r.codigo] = 1; });
+  state.rd.forEach(function (r) { if (r.codigo && r.tourDate) (cb[r.tourDate] = cb[r.tourDate] || {})[r.codigo] = 1; });
+  Object.keys(cr).forEach(function (d) {
+    var cods = Object.keys(cr[d]), tot = cods.length; if (!tot) return;
+    var solape = function (e) { var n = 0; cods.forEach(function (c) { if (cb[e] && cb[e][c]) n++; }); return n / tot; };
+    if (solape(d) >= 0.2) return;
+    var mejor = null, mp = 0;
+    Object.keys(cb).forEach(function (e) { var o = solape(e); if (o > mp) { mp = o; mejor = e; } });
+    if (mejor && mp >= 0.5) mapa[d] = mejor;
+  });
+  remapFechasHR = mapa;
+}
 function construirUnificado() {
   if (_cacheUni) return _cacheUni;
+  calcularRemapFechas();
   var porHR = {};
-  state.hr.forEach(function (r) {
-    if (!r.codigo) return;
+  state.hr.forEach(function (r0) {
+    if (!r0.codigo) return;
+    var r = r0;
+    if (r0.fecha && remapFechasHR[r0.fecha]) { r = Object.assign({}, r0, { fecha: remapFechasHR[r0.fecha] }); }
     var k = r.codigo + '||' + (r.fecha || '');
     if (!porHR[k]) porHR[k] = Object.assign({}, r);
     else {
@@ -1672,7 +1692,8 @@ function renderCabecera() {
   $('titulo').textContent = d ? 'Jornada del ' + dia : 'Control de rutas';
   var bl = state.sic[fechaSel];
   $('subtitulo').textContent = bl && bl.runSeg !== null ? 'Datos del SIC actualizados a las ' + fmtHora(bl.runSeg) + '.' : (d ? 'Todavía no hay datos del SIC para esta fecha.' : '');
-  var nHr = state.hr.filter(function (r) { return r.fecha === fechaSel; }).length;
+  calcularRemapFechas();
+  var nHr = state.hr.filter(function (r) { return (remapFechasHR[r.fecha] || r.fecha) === fechaSel; }).length;
   var nRd = state.rd.filter(function (r) { return r.tourDate === fechaSel; }).length;
   $('pillsFuentes').innerHTML =
     '<span class="pill-src ' + (bl ? 'ok' : '') + '">' + (bl ? '✓' : '○') + ' Ruta SIF</span>' +
@@ -3113,7 +3134,7 @@ async function iniciar() {
   if (!ok) $('notaGuardado').textContent = 'Este navegador no permite guardar datos; usa las copias JSON.';
 }
 iniciar();
-window.__segsol = { refrescar: refrescar, importarArchivos: importarArchivos, generarEjemplo: generarEjemplo, cambiarVista: cambiarVista };
+window.__segsol = { state: state, invalidar: invalidar, refrescar: refrescar, importarArchivos: importarArchivos, generarEjemplo: generarEjemplo, cambiarVista: cambiarVista };
 })();
 
 </script>
