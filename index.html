@@ -714,7 +714,7 @@ var state = {
   rd: [],            // Bees     (poc_external_id, status, volúmenes...)
   sic: {},           // SIC por fecha: { 'AAAA-MM-DD': { run, filas:[...] } }
   cerrados: [],      // días cerrados (no se tocan al importar)
-  cfg: { umbral: 10.5, tolerancia: 0.75, amarillo: 9.5, minProy: 25, usarProy: false, manual: {}, empresas: {} },
+  cfg: { umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} },
   geo: {},
   kml: { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }
 };
@@ -3034,7 +3034,7 @@ function wire() {
       var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros Roadmap, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
       state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
-      state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0.75, amarillo: 9.5, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
+      state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Copia restaurada.');
     } catch (err) { avisar('No se pudo restaurar: ' + err.message, true); }
   });
@@ -3080,7 +3080,7 @@ function wire() {
 
 /* Datos guardados con los parámetros anteriores (10 h, sin tolerancia): pasan a 10 h 30 m + 45 min */
 function migrarCfg(guardado) {
-  if (guardado && guardado.tolerancia === undefined) { state.cfg.umbral = 10.5; state.cfg.tolerancia = 0.75; state.cfg.amarillo = 9.5; }
+  if (guardado && guardado.ver !== 2) { state.cfg.umbral = 10.5; state.cfg.tolerancia = 0; state.cfg.amarillo = 9.5; state.cfg.ver = 2; }
 }
 async function iniciar() {
   wire();
