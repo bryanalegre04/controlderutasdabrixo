@@ -1,9 +1,16 @@
-# DABRIXO · Control de rutas SIF
-Programa de un solo archivo (`index.html`), sin contraseña y sin servidor. Ábrelo en el navegador.
+# DABRIXO · Control de rutas SIF (con Supabase)
 
-## Qué hace
-- **Semáforo de Ruta SIF por ruta**: tiempo en mercado (SIC) contra el límite de 10 h (editable). Rojo = Ruta SIF, amarillo = en riesgo (desde 9 h), verde = normal.
-- **Avance de rutas**: cruce Roadmap + Bees por código de cliente y fecha (Entregado, Parcial, Rechazado, Pendiente, Desplanificado, MR% pedido y volumen).
-- **Importadores**: Excel Ruta SIF (SIC), Excel Roadmap y Excel Bees (admite también el reporte completo con ambas hojas).
-- Días cerrados, horas planeadas manuales por ruta, exportar a Excel y copia JSON.
-Los datos se guardan en el navegador (IndexedDB).
+Archivos para subir a tu repositorio de GitHub Pages (misma carpeta):
+- `index.html`  → el programa
+- `config.json` → tu URL y clave pública de Supabase (editalo en GitHub con el lápiz)
+
+## Preparar Supabase (una sola vez)
+1. Entra a supabase.com → New project.
+2. SQL Editor → New query → pega todo `supabase_setup.sql` → Run.
+3. Project Settings → API: copia **Project URL** y la clave **anon public**.
+4. Pégalas en `config.json` y súbelo junto a `index.html`.
+
+## Uso
+- Todos los que abran la página ven los datos (se actualizan solos cada 20 segundos).
+- Para importar archivos o cambiar parámetros: «Desbloquear con contraseña» (`bryan123`).
+- La contraseña se verifica en el servidor. Para cambiarla, edita 'bryan123' en las dos funciones de `supabase_setup.sql` y vuelve a ejecutarlo.

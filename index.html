@@ -421,6 +421,16 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
 .ms-op span { flex: 1; }
 .ms-op small { color: var(--ink-3, #7a8594); }
 
+.solo-lectura [data-edit] { display: none !important; }
+.err-login { color: var(--bad, #b3261e); font-size: 13px; margin: 6px 0 0; }
+#estNube.mal { color: #f2645d; }
+
+.caja .campo span { color: var(--ink-2, #44505e); }
+.caja .campo input { width: 100%; }
+
+.sin-escritura [data-w] { display: none !important; }
+.nota-modal { font-size: 12.5px; color: var(--ink-2, #44505e); }
+
 </style>
 </head>
 <body>
@@ -436,7 +446,18 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
       <select id="selFecha" aria-label="Fecha de trabajo"></select>
     </div>
 
-    <div class="rail-block">
+    <div class="rail-block" id="bloqueAcceso" hidden>
+      <h2 class="rail-h">Edición</h2>
+      <div class="src">
+        <div class="src-estado" id="estAcceso"></div>
+        <button class="btn-imp" type="button" id="btnLogin">Desbloquear con contraseña</button>
+        <button class="btn-rail" type="button" id="btnGh" hidden>Conexión con GitHub</button>
+        <button class="btn-rail" type="button" id="btnLogout" hidden>Bloquear de nuevo</button>
+        <p class="nota-rail" id="estNube"></p>
+      </div>
+    </div>
+
+    <div class="rail-block" data-edit>
       <h2 class="rail-h">Importar archivos</h2>
       <div class="src">
         <div class="src-top"><b>Ruta SIF</b><span class="src-sub">SIC · retorno de unidades</span></div>
@@ -463,7 +484,7 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
       <p class="nota-rail">Puedes subir varios días: cada importación suma y actualiza solo las fechas que trae el archivo.</p>
     </div>
 
-    <details>
+    <details data-edit>
       <summary class="rail-h">Parámetros del semáforo</summary>
       <div>
         <label class="campo"><span>Tiempo de Ruta SIF (horas)</span><input type="number" id="cfgUmbral" min="1" max="24" step="0.25"></label>
@@ -497,12 +518,12 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
       <div>
         <button class="btn-rail" type="button" id="btnExportar">Exportar a Excel</button>
         <button class="btn-rail" type="button" id="btnBackup">Descargar copia (JSON)</button>
-        <button class="btn-rail" type="button" id="btnRestaurar">Restaurar copia (JSON)</button>
+        <button class="btn-rail" type="button" data-edit id="btnRestaurar">Restaurar copia (JSON)</button>
         <input type="file" id="inputBackup" accept=".json" hidden>
         <button class="btn-rail" type="button" id="btnBorrarBusq">Borrar ubicaciones buscadas</button>
         <button class="btn-rail" type="button" id="btnQuitarKml">Quitar mapas KML</button>
         <button class="btn-rail" type="button" id="btnEjemplo">Ver datos de ejemplo</button>
-        <button class="btn-rail peligro" type="button" id="btnVaciar">Vaciar todo</button>
+        <button class="btn-rail peligro" type="button" data-edit id="btnVaciar">Vaciar todo</button>
         <p class="nota-rail" id="notaGuardado">Los datos se guardan en este navegador.</p>
       </div>
     </details>
@@ -525,9 +546,9 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
       <h2>Importa tus tres archivos para empezar</h2>
       <p>El semáforo de Ruta SIF se calcula con el tiempo en mercado del SIC. El avance de cada ruta sale de cruzar el Roadmap con Bees por código de cliente y fecha.</p>
       <div class="fuentes-grid">
-        <div class="fuente-card"><b>Ruta SIF</b><span>Excel de retorno de unidades del SIC (hoja Data).</span><button class="btn primario" type="button" data-imp="sic">Importar Ruta SIF</button></div>
-        <div class="fuente-card"><b>Roadmap</b><span>Ruta, código de cliente, Entregado, Rechazo, Hl_Programado.</span><button class="btn primario" type="button" data-imp="roadmap">Importar Roadmap</button></div>
-        <div class="fuente-card"><b>Bees</b><span>poc_external_id, status y volúmenes por pedido.</span><button class="btn primario" type="button" data-imp="bees">Importar Bees</button></div>
+        <div class="fuente-card"><b>Ruta SIF</b><span>Excel de retorno de unidades del SIC (hoja Data).</span><button class="btn primario" type="button" data-edit data-imp="sic">Importar Ruta SIF</button></div>
+        <div class="fuente-card"><b>Roadmap</b><span>Ruta, código de cliente, Entregado, Rechazo, Hl_Programado.</span><button class="btn primario" type="button" data-edit data-imp="roadmap">Importar Roadmap</button></div>
+        <div class="fuente-card"><b>Bees</b><span>poc_external_id, status y volúmenes por pedido.</span><button class="btn primario" type="button" data-edit data-imp="bees">Importar Bees</button></div>
       </div>
       <button class="btn" type="button" id="btnEjemplo2">Ver cómo se ve con datos de ejemplo</button>
     </div>
@@ -1397,7 +1418,9 @@ var timerGuardar = null;
 function guardar() {
   clearTimeout(timerGuardar);
   timerGuardar = setTimeout(function () {
+    if (modoNube) { if (nube.tipo === 'github' || nube.tipo === 'supabase') { clearTimeout(nube.tSubida); nube.tSubida = setTimeout(subirNube, nube.tipo === 'github' ? 3500 : 1500); } else subirNube(); }
     DB.set('estado', state).then(function (ok) {
+      if (modoNube) return;
       $('notaGuardado').textContent = ok ? 'Guardado en este navegador (' + new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) + ').' : 'No se pudo guardar en este navegador. Descarga una copia JSON.';
     });
   }, 400);
@@ -1523,6 +1546,7 @@ async function leerArchivo(file, tipo) {
 }
 
 async function importarArchivos(files, tipo) {
+  if (!puedeEditar()) { avisar('Desbloquea la edición con la contraseña de editor para importar.', true); return; }
   var resumen = [], fechasNuevas = [];
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
@@ -1993,7 +2017,7 @@ function renderAvance() {
   var semPorRuta = {};
   (sifCache && sifCache.fecha === fechaSel ? sifCache.rutas : calcularSif(fechaSel).rutas).forEach(function (x) { semPorRuta[x.ruta] = x.semaforo; });
   var nOc = Object.keys(ocultasDia[fechaSel] || {}).length;
-  $('contAv').innerHTML = porRuta.length + ' fila' + (porRuta.length === 1 ? '' : 's') + ' (una por ruta y viaje) · clic para ver sus clientes' + (nOc ? ' · <button type="button" class="btn-ic" id="btnMostrarOcultas">Mostrar ' + nOc + ' oculta' + (nOc === 1 ? '' : 's') + '</button>' : '');
+  $('contAv').innerHTML = porRuta.length + ' fila' + (porRuta.length === 1 ? '' : 's') + ' (una por ruta y viaje) · clic para ver sus clientes' + (nOc ? ' · <button type="button" class="btn-ic" data-w id="btnMostrarOcultas">Mostrar ' + nOc + ' oculta' + (nOc === 1 ? '' : 's') + '</button>' : '');
   var clientesPorRuta = {};
   porRutaUni.forEach(function (r) { var k = (r.ruta || '(Sin ruta)') + '||' + (r.viaje || '—'); (clientesPorRuta[k] = clientesPorRuta[k] || []).push(r); });
   var html = '<thead><tr><th>Ruta</th><th>Viaje</th><th>SIF</th><th>Placa</th><th class="r">Clientes</th><th style="min-width:150px">Avance</th><th class="r">Entreg.</th><th class="r">Pend.</th><th class="r">Parc.</th><th class="r">Rech.</th><th class="r">Desplan.</th><th class="r">Vol. prog.</th><th class="r">Vol. entreg.</th><th class="r">Vol. rech.</th><th class="r">MR% vol.</th><th class="r">MR% ped.</th><th></th></tr></thead><tbody>';
@@ -2008,7 +2032,7 @@ function renderAvance() {
       '<td><div class="t-celda">' + segHtml(g) + '<span class="num">' + fmtPct(g.avancePct) + ' <span class="txt-mut">(' + g.avanzados + '/' + g.clientes + ')</span></span></div></td>' +
       '<td class="r num txt-ok">' + g.entregados + '</td><td class="r num">' + g.pendientes + '</td><td class="r num txt-warn">' + g.parciales + '</td><td class="r num txt-bad">' + g.rechazados + '</td><td class="r num txt-mut">' + g.desplanificados + '</td>' +
       '<td class="r num">' + fmtHl(g.volP) + '</td><td class="r num txt-ok">' + fmtHl(g.volE) + '</td><td class="r num txt-bad">' + fmtHl(g.volRTotal) + '</td>' +
-      '<td class="r num ' + (g.mrVolumen <= METAS.mrVolumen ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrVolumen) + '</td><td class="r num ' + (g.mrPedido <= METAS.mrPedido ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrPedido) + '</td><td class="acc-fila"><button type="button" class="btn-ic" data-ocultar="' + esc(kAv) + '" title="Ocultar esta ruta">Ocultar</button><button type="button" class="btn-ic mal" data-eliminar="' + esc(kAv) + '" title="Eliminar los datos de esta ruta">Eliminar</button></td></tr>';
+      '<td class="r num ' + (g.mrVolumen <= METAS.mrVolumen ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrVolumen) + '</td><td class="r num ' + (g.mrPedido <= METAS.mrPedido ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrPedido) + '</td><td class="acc-fila"><button type="button" class="btn-ic" data-w data-ocultar="' + esc(kAv) + '" title="Ocultar esta ruta">Ocultar</button><button type="button" class="btn-ic mal" data-w data-eliminar="' + esc(kAv) + '" title="Eliminar los datos de esta ruta">Eliminar</button></td></tr>';
     if (abierta) {
       html += '<tr class="detalle-fila"><td colspan="17"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
         (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + fmtHl(r.volumenRechazado) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>'; }).join('') +
@@ -3022,6 +3046,10 @@ function wirePend() {
 
 /* ---------------- exportar y copias ---------------- */
 function descargar(blob, nombre) {
+  if (modoNube && nube.dl) {
+    nube.dl.save({ filename: nombre, data: blob }).then(function () { avisar('Archivo guardado.'); }).catch(function (e) { if (!e || e.code !== 'declined') avisar('No se pudo guardar el archivo (' + (e && e.code ? e.code : 'error') + ').', true); });
+    return;
+  }
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = nombre;
   document.body.appendChild(a); a.click();
@@ -3049,8 +3077,7 @@ function exportarExcel() {
   var s3 = uni.map(function (r) { return { 'Fecha': formatearFecha(r.fecha), 'Ruta': r.ruta, 'Viaje': r.viaje || '', 'Placa': r.vehiculo, 'Código': r.codigo, 'Cliente': r.cliente, 'Estado': r.estado, 'Vol. programado (hl)': r.volumenProgramado, 'Vol. entregado (hl)': r.volumenEntregado, 'Vol. rechazado (hl)': r.volumenRechazado, 'Motivo': r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '' }; });
   var ws3 = XLSX.utils.json_to_sheet(s3); ws3['!cols'] = [11, 8, 7, 10, 12, 36, 14, 16, 16, 16, 24].map(function (w) { return { wch: w }; });
   XLSX.utils.book_append_sheet(wb, ws3, 'Detalle clientes');
-  XLSX.writeFile(wb, 'DABRIXO_rutas_' + fechaSel + '.xlsx');
-  avisar('Excel exportado: DABRIXO_rutas_' + fechaSel + '.xlsx');
+  descargar(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }), 'DABRIXO_rutas_' + fechaSel + '.xlsx');
 }
 function copiaJson() {
   var hoy = new Date().toISOString().slice(0, 10);
@@ -3217,6 +3244,308 @@ function wire() {
 function migrarCfg(guardado) {
   if (guardado && guardado.ver !== 2) { state.cfg.umbral = 10.5; state.cfg.tolerancia = 0; state.cfg.amarillo = 9.5; state.cfg.ver = 2; }
 }
+
+/* ---------------- datos compartidos y contraseña de editor ----------------
+   Dos formas de compartir, según dónde se abra el programa:
+   · GitHub Pages (o cualquier web): los datos viven en el archivo «datos.gz» del repositorio. Todos lo leen;
+     el editor (contraseña + token de GitHub) lo actualiza con un commit.
+   · Página publicada en Claude: los datos viven en la base compartida del artefacto.
+   Abierto como archivo local (file://) no se activa nada y el programa funciona como siempre. */
+var ACCESO = { salt: 'cGHUFh6kHVdbanglkCjKGw==', iter: 150000, hash: 'weTN+Lcper09Ota9Y0SUV58t/n7zVAwFFetNwzEPyL4=' };
+var modoNube = false;
+var nube = { tipo: '', listo: false, db: null, dl: null, usuario: null, ts: 0, n: 0, subiendo: false, pendiente: false, ultimoJson: '', soloLectura: false, bajando: false, cola: null, intentos: 0, timerSondeo: null };
+var gh = { repo: '', rama: 'main', ruta: 'datos.gz', token: '' };
+var sb = { url: '', key: '' };
+function puedeEditar() { return !modoNube || !!nube.usuario; }
+/* ocultar / eliminar rutas cambia datos de todos: en GitHub solo lo hace quien tiene token */
+function puedeEscribirCompartido() { return !modoNube || (nube.tipo === 'github' ? (!!nube.usuario && !!gh.token) : (nube.tipo === 'supabase' ? !!nube.usuario : !nube.soloLectura)); }
+function aB64(buf) {
+  var b = new Uint8Array(buf), s = '';
+  for (var i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function b64aBuf(t) { var s = atob(t), b = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+async function comprimir(texto) { return aB64(await new Response(new Blob([texto]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); }
+async function descomprimirBuf(buf) { return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); }
+async function descomprimir(b64) { return descomprimirBuf(b64aBuf(b64)); }
+function armarPayload() {
+  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], cfg: state.cfg, kml: state.kml });
+}
+function horaCorta(ms) { return new Date(ms).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }); }
+function notaNube(t, mal) { var e = $('estNube'); if (e) { e.textContent = t; e.classList.toggle('mal', !!mal); } }
+
+/* --- configuración de GitHub (solo el editor la guarda, en su propio navegador) --- */
+function repoPorDefecto() {
+  var h = location.hostname, seg = location.pathname.split('/').filter(Boolean);
+  if (/\.github\.io$/i.test(h)) { var dueno = h.split('.')[0]; var rep = seg.length && !/\.html?$/i.test(seg[0]) ? seg[0] : dueno + '.github.io'; return dueno + '/' + rep; }
+  return '';
+}
+function cargarGh() {
+  try { var o = JSON.parse(localStorage.getItem('dbx_gh') || 'null'); if (o) gh = Object.assign(gh, o); } catch (e) {}
+  if (!gh.repo) gh.repo = repoPorDefecto();
+}
+function guardarGh() { try { localStorage.setItem('dbx_gh', JSON.stringify(gh)); } catch (e) {} }
+function urlDatos() { return new URL(gh.ruta.split('/').pop(), location.href.split('#')[0].split('?')[0]).href; }
+
+/* --- aplicar al programa lo que llega de la nube --- */
+function aplicarRemoto(o, meta) {
+  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || [];
+  if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
+  state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {});
+  state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
+  nube.ts = meta.ts; nube.intentos = 0; nube.listo = true;
+  nube.ultimoJson = armarPayload();
+  invalidar();
+  if (!fechaSel || fechasDisponibles().indexOf(fechaSel) === -1) fechaSel = fechasDisponibles()[0] || '';
+  refrescar(true);
+  DB.set('estado', state);
+  notaNube('Datos al día · ' + horaCorta(meta.ts) + (meta.por === 'editor' ? ' · cargados por el editor' : ''));
+}
+
+/* --- subir --- */
+async function ghFetch(metodo, ruta, cuerpo) {
+  var r = await fetch('https://api.github.com/repos/' + gh.repo + '/contents/' + ruta.split('/').map(encodeURIComponent).join('/') + (metodo === 'GET' ? '?ref=' + encodeURIComponent(gh.rama) : ''), {
+    method: metodo, headers: { 'Authorization': 'Bearer ' + gh.token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: cuerpo ? JSON.stringify(cuerpo) : undefined, cache: 'no-store'
+  });
+  return r;
+}
+async function subirGithub(z, ts) {
+  var msg = 'Datos DABRIXO ' + new Date(ts).toLocaleString('es-PE');
+  for (var intento = 0; intento < 2; intento++) {
+    var g = await ghFetch('GET', gh.ruta), sha;
+    if (g.status === 200) sha = (await g.json()).sha;
+    else if (g.status !== 404) throw new Error(g.status === 401 || g.status === 403 ? 'El token no tiene permiso (revisa que sea de este repositorio y con «Contents: Read and write»).' : 'GitHub respondió ' + g.status);
+    var p = await ghFetch('PUT', gh.ruta, { message: msg, content: z, branch: gh.rama, sha: sha });
+    if (p.ok) return;
+    if (p.status !== 409 && p.status !== 422) throw new Error(p.status === 401 || p.status === 403 ? 'El token no tiene permiso para escribir en el repositorio.' : 'GitHub respondió ' + p.status);
+  }
+  throw new Error('Otro cambio llegó al mismo tiempo. Vuelve a intentarlo.');
+}
+async function subirNube() {
+  if (!modoNube || !nube.listo || nube.soloLectura) return;
+  if (nube.tipo === 'claude' && !nube.db) return;
+  if (nube.tipo === 'github' && (!nube.usuario || !gh.token || !gh.repo)) return;
+  if (nube.tipo === 'supabase' && (!nube.usuario || !nube.clave)) return;
+  if (nube.subiendo) { nube.pendiente = true; return; }
+  nube.subiendo = true;
+  try {
+    var json = armarPayload();
+    if (json === nube.ultimoJson) return;
+    var ts = Date.now(), por = nube.usuario ? 'editor' : 'visitante';
+    nube.ts = ts;   // antes de escribir: así no se vuelve a bajar lo propio
+    if (nube.tipo === 'supabase') {
+      await sbSubir(await comprimir(json), ts, por);
+    } else if (nube.tipo === 'github') {
+      var z = await comprimir('{"ts":' + ts + ',"por":"' + por + '",' + json.slice(1));
+      await subirGithub(z, ts);
+    } else {
+      var zc = await comprimir(json), TAM = 180000, n = Math.max(1, Math.ceil(zc.length / TAM)), nAnt = nube.n;
+      for (var i = 0; i < n; i++) await nube.db.doc('sync/c' + i).set({ i: i, ts: ts, d: zc.slice(i * TAM, (i + 1) * TAM) });
+      await nube.db.doc('sync/meta').set({ ts: ts, n: n, por: por, v: 1, kb: Math.round(zc.length / 1024) });
+      for (var j = n; j < nAnt; j++) { try { await nube.db.doc('sync/c' + j).delete(); } catch (e) {} }
+      nube.n = n;
+    }
+    nube.ultimoJson = json;
+    notaNube('Compartido con todos · ' + horaCorta(ts) + (nube.tipo === 'github' ? ' (los demás lo ven en 1–2 minutos)' : (nube.tipo === 'supabase' ? ' (los demás lo ven en unos segundos)' : '')));
+  } catch (e) {
+    console.error(e);
+    notaNube('No se pudo compartir: ' + (e && e.message ? e.message : 'error'), true);
+    avisar('No se pudieron compartir los datos con los demás: ' + (e && e.message ? e.message : 'error'), true);
+  } finally {
+    nube.subiendo = false;
+    if (nube.pendiente) { nube.pendiente = false; subirNube(); }
+  }
+}
+
+/* --- bajar --- */
+async function bajarNube(meta) {   // base de Claude
+  if (nube.bajando) { nube.cola = meta; return; }
+  nube.bajando = true;
+  try {
+    var partes = [];
+    for (var i = 0; i < meta.n; i++) {
+      var s = await nube.db.doc('sync/c' + i).get(), d = s.exists ? s.data() : null;
+      if (!d || d.ts !== meta.ts) throw new Error('parcial');
+      partes[i] = d.d;
+    }
+    nube.n = meta.n;
+    aplicarRemoto(JSON.parse(await descomprimir(partes.join(''))), meta);
+  } catch (e) {
+    if (e && e.message === 'parcial' && nube.intentos < 6) { nube.intentos++; setTimeout(function () { bajarNube(meta); }, 2500); }
+    else { console.error(e); notaNube('No se pudieron leer los datos compartidos.', true); }
+  } finally {
+    nube.bajando = false;
+    if (nube.cola) { var m = nube.cola; nube.cola = null; if (m.ts !== nube.ts) bajarNube(m); }
+  }
+}
+async function sondearGithub() {   // GitHub Pages: lee datos.gz (el navegador revalida con ETag y casi no gasta)
+  if (nube.bajando || nube.subiendo) return;
+  nube.bajando = true;
+  try {
+    var r = await fetch(urlDatos(), { cache: 'no-cache' });
+    if (r.status === 404) { nube.listo = true; notaNube(puedeEditar() ? 'Aún no hay datos compartidos. Importa los archivos.' : 'Aún no hay datos publicados.'); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var o = JSON.parse(await descomprimirBuf(await r.arrayBuffer()));
+    if (o.ts && o.ts !== nube.ts) aplicarRemoto(o, { ts: o.ts, por: o.por });
+    else { nube.listo = true; if (o.ts) notaNube('Datos al día · ' + horaCorta(o.ts) + (o.por === 'editor' ? ' · cargados por el editor' : '')); }
+  } catch (e) {
+    console.error(e);
+    nube.listo = true;
+    notaNube('No se pudo leer los datos compartidos (' + (e && e.message ? e.message : 'error') + '). Se reintenta solo.', true);
+  } finally { nube.bajando = false; }
+}
+
+/* --- Supabase: tabla dabrixo_datos + funciones guardar_datos / verificar_clave (ver supabase_setup.sql) --- */
+function sbCab() { return { 'apikey': sb.key, 'Authorization': 'Bearer ' + sb.key, 'Content-Type': 'application/json' }; }
+async function sbRpc(nombre, cuerpo) {
+  var r = await fetch(sb.url + '/rest/v1/rpc/' + nombre, { method: 'POST', headers: sbCab(), body: JSON.stringify(cuerpo) });
+  var t = await r.text(), j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {}
+  if (!r.ok) { var m = j && j.message ? j.message : ('HTTP ' + r.status); throw new Error(/clave/i.test(m) ? 'La contraseña de editor no coincide con la del servidor.' : m); }
+  return j;
+}
+async function sbVerificar(clave) { return (await sbRpc('verificar_clave', { p_clave: clave })) === true; }
+async function sbSubir(z, ts, por) { await sbRpc('guardar_datos', { p_clave: nube.clave, p_ts: ts, p_por: por, p_z: z }); }
+async function sondearSupabase() {
+  if (nube.bajando || nube.subiendo) return;
+  nube.bajando = true;
+  try {
+    var base = sb.url + '/rest/v1/dabrixo_datos?id=eq.estado&select=';
+    var r = await fetch(base + 'ts,por', { headers: sbCab(), cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status === 404 ? 'no existe la tabla dabrixo_datos (ejecuta supabase_setup.sql)' : 'HTTP ' + r.status);
+    var meta = (await r.json())[0];
+    if (!meta) { nube.listo = true; notaNube(puedeEditar() ? 'Aún no hay datos compartidos. Importa los archivos.' : 'Aún no hay datos publicados.'); return; }
+    if (Number(meta.ts) === nube.ts) { nube.listo = true; notaNube('Datos al día · ' + horaCorta(Number(meta.ts)) + (meta.por === 'editor' ? ' · cargados por el editor' : '')); return; }
+    var r2 = await fetch(base + 'z', { headers: sbCab(), cache: 'no-store' });
+    if (!r2.ok) throw new Error('HTTP ' + r2.status);
+    var z = (await r2.json())[0].z;
+    aplicarRemoto(JSON.parse(await descomprimir(z)), { ts: Number(meta.ts), por: meta.por });
+  } catch (e) {
+    console.error(e);
+    nube.listo = true;
+    notaNube('No se pudo leer los datos compartidos (' + (e && e.message ? e.message : 'error') + '). Se reintenta solo.', true);
+  } finally { nube.bajando = false; }
+}
+
+/* --- contraseña de editor --- */
+async function derivarClave(clave, saltB64, iter) {
+  var k = await crypto.subtle.importKey('raw', new TextEncoder().encode(clave), 'PBKDF2', false, ['deriveBits']);
+  return aB64(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: b64aBuf(saltB64), iterations: iter, hash: 'SHA-256' }, k, 256));
+}
+function aplicarModo() {
+  var app = document.querySelector('.app');
+  app.classList.toggle('solo-lectura', modoNube && !nube.usuario);
+  app.classList.toggle('sin-escritura', modoNube && !puedeEscribirCompartido());
+  $('bloqueAcceso').hidden = !modoNube;
+  if (!modoNube) return;
+  var ed = !!nube.usuario;
+  $('estAcceso').textContent = ed ? (nube.tipo === 'github' && !gh.token ? 'Edición desbloqueada, pero falta el token de GitHub para compartir los cambios.' : 'Edición desbloqueada: puedes importar archivos y cambiar los parámetros.') : (nube.soloLectura ? 'Tu enlace es de solo lectura: no puedes cambiar datos.' : 'Importar archivos y cambiar los parámetros requiere la contraseña de editor.');
+  $('btnLogin').hidden = ed || nube.soloLectura;
+  $('btnLogout').hidden = !ed;
+  $('btnGh').hidden = !(ed && nube.tipo === 'github');
+  var h = $('vacio').querySelector('h2');
+  if (h) h.textContent = ed ? 'Importa tus tres archivos para empezar' : 'Todavía no hay datos publicados';
+}
+function abrirConfigGithub(despues) {
+  var c = modal('<h3>Conectar con GitHub</h3><p>Para que lo que importes lo vean todos, el programa guarda los datos en el archivo <b>' + esc(gh.ruta) + '</b> de tu repositorio. Se necesita un token de GitHub, que queda guardado solo en este navegador.</p>' +
+    '<label class="campo"><span>Repositorio (usuario/nombre)</span><input id="ghRepo" type="text" autocapitalize="none"></label>' +
+    '<label class="campo"><span>Rama</span><input id="ghRama" type="text" autocapitalize="none"></label>' +
+    '<label class="campo"><span>Archivo de datos en el repositorio</span><input id="ghRuta" type="text" autocapitalize="none"></label>' +
+    '<label class="campo"><span>Token de GitHub</span><input id="ghTok" type="password" autocomplete="off" placeholder="github_pat_…"></label>' +
+    '<p class="nota-modal">Si tu página sale de una carpeta (por ejemplo docs), escribe docs/datos.gz en «Archivo de datos». Cómo crear el token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate. En «Repository access» elige solo este repositorio y en «Permissions → Contents» marca <b>Read and write</b>.</p>' +
+    '<p class="err-login" id="ghErr" hidden></p>' +
+    '<div class="acciones"><button class="btn" id="ghNo" type="button">Ahora no</button><button class="btn primario" id="ghSi" type="button">Guardar</button></div>');
+  c.querySelector('#ghRepo').value = gh.repo; c.querySelector('#ghRama').value = gh.rama; c.querySelector('#ghRuta').value = gh.ruta; c.querySelector('#ghTok').value = gh.token;
+  c.querySelector('#ghNo').onclick = cerrarModal;
+  c.querySelector('#ghSi').onclick = function () {
+    var repo = c.querySelector('#ghRepo').value.trim(), rama = c.querySelector('#ghRama').value.trim() || 'main', tok = c.querySelector('#ghTok').value.trim(), ruta = c.querySelector('#ghRuta').value.trim().replace(/^\/+/, '') || 'datos.gz', er = c.querySelector('#ghErr');
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !tok) { er.hidden = false; er.textContent = 'Escribe el repositorio como usuario/nombre y pega el token.'; return; }
+    gh.repo = repo; gh.rama = rama; gh.ruta = ruta; gh.token = tok; guardarGh();
+    cerrarModal(); aplicarModo(); refrescar(true);
+    avisar('GitHub conectado.');
+    if (hayDatos()) subirNube();
+  };
+}
+var intentosLogin = 0, bloqueoLogin = 0;
+function abrirLogin() {
+  var c = modal('<h3>Contraseña de editor</h3><p>Se pide solo para importar archivos y cambiar los parámetros. Para ver y usar el programa no hace falta.</p>' +
+    '<label class="campo"><span>Contraseña</span><input id="lgPass" type="password" autocomplete="current-password"></label>' +
+    '<p class="err-login" id="lgErr" hidden></p>' +
+    '<div class="acciones"><button class="btn" id="lgNo" type="button">Cancelar</button><button class="btn primario" id="lgSi" type="button">Desbloquear</button></div>');
+  var p = c.querySelector('#lgPass'), er = c.querySelector('#lgErr');
+  async function entrar() {
+    if (Date.now() < bloqueoLogin) { er.hidden = false; er.textContent = 'Demasiados intentos. Espera unos segundos.'; return; }
+    er.hidden = true; c.querySelector('#lgSi').disabled = true;
+    try {
+      var okClave = nube.tipo === 'supabase' ? await sbVerificar(p.value) : (await derivarClave(p.value, ACCESO.salt, ACCESO.iter)) === ACCESO.hash;
+      if (okClave) {
+        nube.usuario = 'editor'; nube.clave = p.value; intentosLogin = 0;
+        try { sessionStorage.setItem('dbx_ed', '1'); if (nube.tipo === 'supabase') sessionStorage.setItem('dbx_pw', p.value); } catch (e) {}
+        cerrarModal(); aplicarModo(); refrescar(true);
+        avisar('Edición desbloqueada.');
+        if (nube.tipo === 'github' && !gh.token) abrirConfigGithub();
+        else if (nube.listo && hayDatos()) subirNube();
+        return;
+      }
+      intentosLogin++;
+      if (intentosLogin >= 5) { bloqueoLogin = Date.now() + 30000; intentosLogin = 0; }
+      er.hidden = false; er.textContent = 'Contraseña incorrecta.';
+    } catch (e) { er.hidden = false; er.textContent = nube.tipo === 'supabase' ? 'No se pudo comprobar la contraseña con el servidor (' + (e && e.message ? e.message : 'error') + ').' : 'No se pudo verificar la contraseña en este navegador.'; }
+    c.querySelector('#lgSi').disabled = false;
+  }
+  c.querySelector('#lgNo').onclick = cerrarModal;
+  c.querySelector('#lgSi').onclick = entrar;
+  c.addEventListener('keydown', function (e) { if (e.key === 'Enter') entrar(); });
+  p.focus();
+}
+function cerrarSesion() {
+  nube.usuario = null; nube.clave = '';
+  try { sessionStorage.removeItem('dbx_ed'); sessionStorage.removeItem('dbx_pw'); } catch (e) {}
+  aplicarModo(); refrescar(true);
+  avisar('Edición bloqueada.');
+}
+async function iniciarNube() {
+  var cl = window.claude, db = null;
+  if (cl && typeof cl.use === 'function') { try { db = await cl.use('db'); } catch (e) { db = null; } }
+  if (db) {
+    nube.tipo = 'claude'; nube.db = db; modoNube = true;
+    try { nube.dl = await cl.use('downloads'); } catch (e) { nube.dl = null; }
+    try { var us = await cl.use('user'); if (us && (await us.can('data.write')) === false) nube.soloLectura = true; } catch (e) {}
+  } else if (/^https?:$/.test(location.protocol)) {
+    modoNube = true;
+    try {
+      var rc = await fetch(new URL('config.json', location.href.split('#')[0].split('?')[0]).href, { cache: 'no-cache' });
+      if (rc.ok) { var cj = await rc.json(); if (cj && cj.supabaseUrl && cj.supabaseKey) { sb.url = String(cj.supabaseUrl).replace(/\/+$/, ''); sb.key = String(cj.supabaseKey); } }
+    } catch (e) {}
+    if (sb.url) nube.tipo = 'supabase'; else { nube.tipo = 'github'; cargarGh(); }
+  } else return;
+  try { if (sessionStorage.getItem('dbx_ed') === '1' && !nube.soloLectura) { nube.usuario = 'editor'; nube.clave = sessionStorage.getItem('dbx_pw') || ''; } } catch (e) {}
+  aplicarModo();
+  $('btnLogin').addEventListener('click', abrirLogin);
+  $('btnLogout').addEventListener('click', cerrarSesion);
+  $('btnGh').addEventListener('click', function () { abrirConfigGithub(); });
+  notaNube('Conectando con los datos compartidos…');
+  if (nube.tipo === 'supabase') {
+    sondearSupabase();
+    nube.timerSondeo = setInterval(function () { if (!document.hidden) sondearSupabase(); }, 20000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) sondearSupabase(); });
+    return;
+  }
+  if (nube.tipo === 'github') {
+    sondearGithub();
+    nube.timerSondeo = setInterval(function () { if (!document.hidden) sondearGithub(); }, 45000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) sondearGithub(); });
+    return;
+  }
+  db.doc('sync/meta').onSnapshot(function (snap) {
+    if (!snap.exists) { nube.listo = true; notaNube(puedeEditar() ? 'Aún no hay datos compartidos. Importa los archivos.' : 'Aún no hay datos publicados.'); if (nube.usuario && hayDatos()) subirNube(); return; }
+    var m = snap.data();
+    if (snap.metadata && snap.metadata.hasPendingWrites) return;
+    if (m.ts === nube.ts) { nube.listo = true; notaNube('Datos al día · ' + horaCorta(m.ts) + (m.por === 'editor' ? ' · cargados por el editor' : '')); return; }
+    bajarNube(m);
+  }, function (e) { notaNube('Sin conexión con los datos compartidos (' + (e && e.code) + ').', true); });
+}
+
 async function iniciar() {
   wire();
   var ok = await DB.abrir();
@@ -3228,6 +3557,7 @@ async function iniciar() {
   }
   invalidar();
   refrescar(true);
+  await iniciarNube();
   if (!ok) $('notaGuardado').textContent = 'Este navegador no permite guardar datos; usa las copias JSON.';
 }
 iniciar();
