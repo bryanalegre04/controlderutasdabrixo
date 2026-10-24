@@ -431,6 +431,13 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
 .sin-escritura [data-w] { display: none !important; }
 .nota-modal { font-size: 12.5px; color: var(--ink-2, #44505e); }
 
+.in-doc { font: inherit; font-size: 12.5px; width: 110px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.in-doc.ancho { width: 190px; }
+.in-doc:disabled { background: transparent; border-color: transparent; }
+td.c, th.c { text-align: center; }
+td.c input[type=checkbox] { width: 17px; height: 17px; cursor: pointer; }
+td.c input[type=checkbox]:disabled { cursor: default; }
+
 </style>
 </head>
 <body>
@@ -559,6 +566,7 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
         <button class="tab" role="tab" id="tab-avance" data-vista="avance" aria-selected="false">Avance de rutas</button>
         <button class="tab" role="tab" id="tab-mapa" data-vista="mapa" aria-selected="false">Mapa y tracking</button>
         <button class="tab" role="tab" id="tab-pend" data-vista="pend" aria-selected="false">Pendientes y alertas</button>
+        <button class="tab" role="tab" id="tab-docs" data-vista="docs" aria-selected="false">Marcajes y facturas</button>
         <button class="tab" role="tab" id="tab-clientes" data-vista="clientes" aria-selected="false">Detalle de clientes</button>
       </nav>
 
@@ -678,6 +686,27 @@ tfoot td { position: sticky; bottom: 0; background: var(--surface-2); border-top
       </section>
 
       <!-- ====== CLIENTES ====== -->
+      <!-- ====== MARCAJES Y FACTURAS ====== -->
+      <section id="vista-docs" class="vista" aria-labelledby="tab-docs" hidden style="flex-direction:column;gap:16px;margin-top:16px">
+        <div class="panel">
+          <div class="filtros"><select id="fdEmpresa" aria-label="Empresa"></select><select id="fdRuta" aria-label="Ruta (BK)"></select><select id="fdCadena" aria-label="Cadena"></select>
+            <select id="fdEstado" aria-label="Estado en Bees"><option value="">Todos los estados</option><option value="Entregado">Entregado</option><option value="Rechazado">Rechazado</option><option value="Parcial">Entrega parcial</option><option value="Pendiente">Pendiente</option><option value="Desplanificado">Desplanificado</option></select>
+            <select id="fdDoc" aria-label="Documentos"><option value="">Todos los documentos</option><option value="completo">Documentos completos</option><option value="faltan">Con faltantes</option><option value="sinfac">Sin factura</option><option value="sinfirma">Sin firma</option><option value="sinmarc">Sin marcaje</option></select>
+            <input type="search" id="fdTexto" placeholder="Buscar código, cliente o factura" aria-label="Buscar"></div>
+          <p class="txt-mut" id="notaDocs" style="margin:8px 0 0"></p>
+        </div>
+        <div class="tiles" id="tilesDocs"></div>
+        <div class="panel">
+          <div class="panel-h"><div><h2>Resumen por cadena</h2><p>Solo clientes entregados o con entrega parcial requieren documentos.</p></div></div>
+          <div class="tabla-wrap"><table id="tablaCadenas"></table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><div><h2>Control de documentos</h2><p>Marca si el cliente entregó la factura, si está firmada y si entregó el marcaje de la cadena.</p></div><span class="txt-mut" id="cntDocs"></span></div>
+          <div class="filtros" style="margin-bottom:10px"><button class="btn chico" type="button" id="btnExpDocs">Exportar a Excel</button></div>
+          <div class="tabla-wrap" style="max-height:640px;overflow:auto"><table id="tablaDocs"></table></div>
+        </div>
+      </section>
+
       <section id="vista-clientes" class="vista" aria-labelledby="tab-clientes" hidden style="flex-direction:column;gap:16px;margin-top:16px">
         <div class="panel">
           <div class="panel-h"><h2>Detalle de clientes</h2><p id="contCli"></p></div>
@@ -751,6 +780,7 @@ var state = {
   rd: [],            // Bees     (poc_external_id, status, volúmenes...)
   sic: {},           // SIC por fecha: { 'AAAA-MM-DD': { run, filas:[...] } }
   cerrados: [],      // días cerrados (no se tocan al importar)
+  docs: {},          // control de facturas y marcajes por cliente: 'AAAA-MM-DD||código' -> {fac, firm, marc, nfac, obs}
   ocultas: [],       // rutas ocultas: 'AAAA-MM-DD||ruta||viaje'
   cfg: { umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} },
   geo: {},
@@ -886,7 +916,7 @@ var ALIAS_HR = {
   cjasRechazado: ['CJASRECHAZADO'], empresa: ['EMPRESA'],
   zonaComercial: ['ZONAAC', 'ZONACOMERCIAL', 'ZONA', 'ZONAVENTAS', 'ZONAACTUAL', 'CODZONA'],
   supervisor: ['SUPERVISOR', 'SUPERVISORDEVENTAS', 'SUPERVISORVENTAS', 'SUPERVISORCOMERCIAL', 'COORDINADOR'],
-  agente: ['AGENTE'], transporte: ['TRANSPORTE'],
+  agente: ['AGENTE'], transporte: ['TRANSPORTE'], unidad: ['UNIDADDENEGOCIO'],
   latitud: ['LATITUD', 'LAT'], longitud: ['LONGITUD', 'LON', 'LNG'], fechaAlerta: ['FECHAHORAALERTA'], retro: ['RETROALIMENTACION']
 };
 function extraerRoadmap(filas) {
@@ -909,7 +939,7 @@ function extraerRoadmap(filas) {
     var fila = filas[i] || [];
     var r = { entregado: '', alerta: '', rechazo: '', motivoRechazo: '', ruta: '', vehiculo: '', fecha: '', codigo: '',
       cliente: '', direccion: '', ciudad: '', viaje: '', hlProgramado: 0, hlFact: null, entregaCjs: 0, cjasRechazado: 0,
-      empresa: '', zonaComercial: '', supervisor: '', agente: '', transporte: '', latitud: null, longitud: null, fechaAlerta: null, retro: '', hlEntr: null, hlRech: null };
+      empresa: '', zonaComercial: '', supervisor: '', agente: '', transporte: '', unidad: '', latitud: null, longitud: null, fechaAlerta: null, retro: '', hlEntr: null, hlRech: null };
     var algo = false;
     cols.forEach(function (j) {
       var campo = mapa[j], v = fila[j];
@@ -1073,6 +1103,27 @@ function statusEsRechazo(s) {
   return l.indexOf('rechaz') !== -1 || l.indexOf('reject') !== -1;
 }
 
+/* Cadenas, tiendas de conveniencia y supermercados (KKAA): por nombre del cliente o por unidad de negocio */
+var CADENAS = [
+  ['Tambo', /\bTAMBO\b|LINDCORP/],
+  ['Cadena de Comercio', /CADENA DE COMERCIO/],
+  ['Coesti', /COESTI/],
+  ['Supermercados Peruanos (Plaza Vea)', /SUPERMERCADOS PERUANOS|PLAZA VEA|VIVANDA|\bSPSA\b/],
+  ['Cencosud (Metro / Wong)', /CENCOSUD|\bMETRO\b|\bWONG\b|\bPARIS\b/],
+  ['Tottus', /TOTTUS|FALABELLA/],
+  ['Makro', /\bMAKRO\b|\bSMU\b|\bMAXI\s?AHORRO\b/],
+  ['Oxxo', /\bOXXO\b|\bOXXO\b/],
+  ['Mass', /\bMASS\b|\bMERCADO MAS\b/],
+  ['Primax / Listo', /\bLISTO\b|PRIMAX|REPSHOP|OK MARKET/]
+];
+function cadenaKkaa(nombre, unidad) {
+  var n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  for (var i = 0; i < CADENAS.length; i++) if (CADENAS[i][1].test(n)) return CADENAS[i][0];
+  var u = String(unidad || '').toUpperCase();
+  if (u.indexOf('CST') !== -1 || u.indexOf('TDACON') !== -1) return 'Otra tienda de conveniencia';
+  if (u.indexOf('SUP') !== -1 && u.indexOf('SUPERM') !== -1) return 'Otro supermercado';
+  return '';
+}
 var _cacheUni = null;
 function invalidar() { _cacheUni = null; }
 
@@ -1186,7 +1237,8 @@ function construirUnificado() {
       visita: rd ? rd.visita : null, ordenOrig: rd ? rd.ordenOrig : null, llegadaMs: rd ? rd.llegadaMs : null, finMs: rd ? rd.finMs : null,
       reprog: rd ? (rd.reprog || 0) : 0, motivoReprog: rd ? (rd.motivoReprog || '') : '', dentroRadio: rd ? rd.dentroRadio : '',
       retro: (hr && hr.retro) || '', fechaAlerta: hr ? hr.fechaAlerta : null, lat: hr && hr.latitud !== null && hr.latitud !== undefined ? hr.latitud : (datosCli[codigo] && datosCli[codigo].lat !== null && datosCli[codigo].lat !== undefined ? datosCli[codigo].lat : null), lon: hr && hr.longitud !== null && hr.longitud !== undefined ? hr.longitud : (datosCli[codigo] && datosCli[codigo].lon !== null && datosCli[codigo].lon !== undefined ? datosCli[codigo].lon : null),
-      tour: rd ? rd.tour : '', entregaCjs: hr ? hr.entregaCjs : 0
+      tour: rd ? rd.tour : '', entregaCjs: hr ? hr.entregaCjs : 0,
+      unidad: (hr && hr.unidad) || '', cadena: cadenaKkaa((hr && hr.cliente) || (rd && rd.cliente) || '', (hr && hr.unidad) || '')
     };
   });
   // rutas ocultas por el usuario: salen de todas las vistas (se pueden volver a mostrar)
@@ -3020,6 +3072,109 @@ function exportarPend(cual) {
   var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   descargar(new Blob([out], { type: 'application/octet-stream' }), 'DABRIXO_' + nombre.replace(/ /g, '_') + '_' + fechaSel + '.xlsx');
 }
+/* ---------------- marcajes y facturas (cadenas, tiendas de conveniencia, supermercados) ---------------- */
+function claveDoc(r) { return (r.fecha || fechaSel) + '||' + r.codigo; }
+function docDe(r) { return (state.docs && state.docs[claveDoc(r)]) || {}; }
+function aplicaDoc(r) { return r.estado === 'Entregado' || r.estado === 'Parcial'; }
+function estadoDoc(r) {
+  if (!aplicaDoc(r)) return r.estado === 'Rechazado' ? 'norequiere' : 'porentregar';
+  var d = docDe(r);
+  return d.fac && d.firm && d.marc ? 'completo' : 'faltan';
+}
+function listaDocs() {
+  var uni = datosDia().filter(function (r) { return r.cadena; });
+  poblarOpciones($('fdEmpresa'), 'Todas las empresas', Array.from(new Set(uni.map(function (r) { return r.empresa; }).filter(Boolean))).sort(), nombreEmpresa, uni.some(function (r) { return !r.empresa; }));
+  poblarOpciones($('fdRuta'), 'Todas las rutas (BK)', Array.from(new Set(uni.map(function (r) { return r.ruta; }).filter(Boolean))).sort());
+  poblarOpciones($('fdCadena'), 'Todas las cadenas', Array.from(new Set(uni.map(function (r) { return r.cadena; }))).sort());
+  var f = { emp: $('fdEmpresa').value, ruta: $('fdRuta').value, cad: $('fdCadena').value, est: $('fdEstado').value, doc: $('fdDoc').value, tx: ($('fdTexto').value || '').toLowerCase().trim() };
+  var l = uni.filter(function (r) {
+    if (f.emp && (f.emp === '__sin__' ? r.empresa : r.empresa !== f.emp)) return false;
+    if (f.ruta && r.ruta !== f.ruta) return false;
+    if (f.cad && r.cadena !== f.cad) return false;
+    if (f.est && r.estado !== f.est) return false;
+    var d = docDe(r);
+    if (f.doc) {
+      if (!aplicaDoc(r)) return false;
+      if (f.doc === 'completo' && !(d.fac && d.firm && d.marc)) return false;
+      if (f.doc === 'faltan' && d.fac && d.firm && d.marc) return false;
+      if (f.doc === 'sinfac' && d.fac) return false;
+      if (f.doc === 'sinfirma' && d.firm) return false;
+      if (f.doc === 'sinmarc' && d.marc) return false;
+    }
+    if (f.tx && (r.codigo + ' ' + r.cliente + ' ' + r.ruta + ' ' + (d.nfac || '')).toLowerCase().indexOf(f.tx) === -1) return false;
+    return true;
+  });
+  l.sort(function (a, b) { return (a.cadena || '').localeCompare(b.cadena || '') || (a.ruta || '').localeCompare(b.ruta || '') || (a.cliente || '').localeCompare(b.cliente || ''); });
+  return l;
+}
+function resumenDocs(l) {
+  var o = { n: l.length, ent: 0, rech: 0, pend: 0, fac: 0, firm: 0, marc: 0, comp: 0, falt: 0, hl: 0 };
+  l.forEach(function (r) {
+    var d = docDe(r); o.hl += r.volumenProgramado || 0;
+    if (r.estado === 'Rechazado') o.rech++;
+    else if (aplicaDoc(r)) { o.ent++; if (d.fac) o.fac++; if (d.firm) o.firm++; if (d.marc) o.marc++; if (d.fac && d.firm && d.marc) o.comp++; else o.falt++; }
+    else o.pend++;
+  });
+  return o;
+}
+function etqDoc(est) {
+  return { completo: '<span class="etq verde"><i></i>Completo</span>', faltan: '<span class="etq amarillo"><i></i>Faltan documentos</span>', porentregar: '<span class="etq gris"><i></i>Por entregar</span>', norequiere: '<span class="etq gris"><i></i>Rechazado</span>' }[est];
+}
+function renderDocs() {
+  var l = listaDocs(), s = resumenDocs(l), edit = puedeEditar();
+  $('notaDocs').textContent = edit ? 'Cadenas detectadas por el nombre del cliente y por la unidad de negocio del Roadmap (tiendas de conveniencia y supermercados).' : 'Solo lectura: el editor marca las facturas y marcajes (botón «Desbloquear con contraseña»).';
+  $('tilesDocs').innerHTML =
+    tile('Clientes de cadenas', s.n, fmtHl(s.hl) + ' programados') + tile('Entregados', s.ent, s.rech + ' rechazados · ' + s.pend + ' por entregar', '--e-ent') +
+    tile('Facturas entregadas', s.fac + ' / ' + s.ent, s.ent ? fmtPct(s.fac / s.ent * 100) : '') + tile('Facturas firmadas', s.firm + ' / ' + s.ent, s.ent ? fmtPct(s.firm / s.ent * 100) : '') +
+    tile('Marcajes entregados', s.marc + ' / ' + s.ent, s.ent ? fmtPct(s.marc / s.ent * 100) : '') + tile('Con documentos faltantes', s.falt, s.comp + ' completos', '--e-par');
+  // resumen por cadena (con los mismos filtros)
+  var por = {}; l.forEach(function (r) { (por[r.cadena] = por[r.cadena] || []).push(r); });
+  var cab = '<thead><tr><th>Cadena</th><th class="r">Clientes</th><th class="r">Entregados</th><th class="r">Rechazados</th><th class="r">Por entregar</th><th class="r">Facturas</th><th class="r">Firmadas</th><th class="r">Marcajes</th><th class="r">Faltantes</th><th class="r">Volumen</th></tr></thead>';
+  $('tablaCadenas').innerHTML = l.length ? cab + '<tbody>' + Object.keys(por).sort().map(function (c) {
+    var x = resumenDocs(por[c]);
+    return '<tr><td><b>' + esc(c) + '</b></td><td class="r num">' + x.n + '</td><td class="r num txt-ok">' + x.ent + '</td><td class="r num txt-bad">' + x.rech + '</td><td class="r num">' + x.pend + '</td><td class="r num">' + x.fac + '</td><td class="r num">' + x.firm + '</td><td class="r num">' + x.marc + '</td><td class="r num ' + (x.falt ? 'txt-warn' : 'txt-ok') + '">' + x.falt + '</td><td class="r num">' + fmtHl(x.hl) + '</td></tr>';
+  }).join('') + '</tbody>' : '<tbody><tr><td class="vacio-fila">No hay clientes de cadenas con estos filtros.</td></tr></tbody>';
+  // tabla de control
+  var MAX = 800, dis = edit ? '' : ' disabled';
+  $('cntDocs').textContent = l.length + ' cliente' + (l.length === 1 ? '' : 's');
+  $('tablaDocs').innerHTML = l.length ? '<thead><tr><th>Cadena</th><th>Ruta</th><th>Viaje</th><th>Empresa</th><th>Código</th><th>Cliente</th><th>Estado en Bees</th><th class="r">Volumen</th><th class="c">Factura entregada</th><th class="c">Firmada</th><th class="c">Marcaje</th><th>N° factura</th><th>Observación</th><th>Documentos</th></tr></thead><tbody>' +
+    l.slice(0, MAX).map(function (r) {
+      var d = docDe(r), k = esc(claveDoc(r)), ap = aplicaDoc(r);
+      function chk(campo) { return '<td class="c"><input type="checkbox" data-doc="' + campo + '" data-k="' + k + '"' + (d[campo] ? ' checked' : '') + dis + (ap ? '' : ' title="Aún no aplica: el cliente no tiene entrega"') + '></td>'; }
+      return '<tr><td>' + esc(r.cadena) + '</td><td><span class="cel-ruta">' + esc(r.ruta || '(Sin ruta)') + '</span></td><td class="num">' + esc(r.viaje || '—') + '</td><td>' + esc(nombreEmpresa(r.empresa)) + '</td><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td>' +
+        chk('fac') + chk('firm') + chk('marc') +
+        '<td><input type="text" class="in-doc" data-doc="nfac" data-k="' + k + '" value="' + esc(d.nfac || '') + '" placeholder="F001-…"' + dis + '></td><td><input type="text" class="in-doc ancho" data-doc="obs" data-k="' + k + '" value="' + esc(d.obs || '') + '"' + dis + '></td><td>' + etqDoc(estadoDoc(r)) + '</td></tr>';
+    }).join('') + '</tbody>' : '<tbody><tr><td class="vacio-fila">No hay clientes de cadenas con estos filtros.</td></tr></tbody>';
+}
+function exportarDocs() {
+  var l = listaDocs();
+  if (!l.length) { avisar('No hay clientes para exportar.', true); return; }
+  var NOM = { completo: 'Completo', faltan: 'Faltan documentos', porentregar: 'Por entregar', norequiere: 'Rechazado' };
+  var filas = l.map(function (r) {
+    var d = docDe(r);
+    return { 'Cadena': r.cadena, 'Ruta': r.ruta, 'Viaje': r.viaje || '', 'Empresa': nombreEmpresa(r.empresa), 'Código': r.codigo, 'Cliente': r.cliente, 'Estado en Bees': r.estado, 'Volumen (hl)': +(r.volumenProgramado || 0).toFixed(3),
+      'Factura entregada': d.fac ? 'Sí' : 'No', 'Firmada': d.firm ? 'Sí' : 'No', 'Marcaje entregado': d.marc ? 'Sí' : 'No', 'N° factura': d.nfac || '', 'Observación': d.obs || '', 'Documentos': NOM[estadoDoc(r)] };
+  });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Marcajes y facturas');
+  descargar(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }), 'DABRIXO_Marcajes_Facturas_' + fechaSel + '.xlsx');
+}
+function wireDocs() {
+  ['fdEmpresa', 'fdRuta', 'fdCadena', 'fdEstado', 'fdDoc'].forEach(function (id) { $(id).addEventListener('change', renderDocs); });
+  $('fdTexto').addEventListener('input', renderDocs);
+  $('btnExpDocs').addEventListener('click', exportarDocs);
+  $('tablaDocs').addEventListener('change', function (e) {
+    var el = e.target.closest('[data-doc]'); if (!el) return;
+    if (!puedeEditar()) { avisar('Desbloquea la edición con la contraseña de editor para marcar documentos.', true); renderDocs(); return; }
+    var k = el.getAttribute('data-k'), campo = el.getAttribute('data-doc');
+    state.docs = state.docs || {};
+    var d = state.docs[k] = state.docs[k] || {};
+    d[campo] = el.type === 'checkbox' ? el.checked : el.value.trim();
+    if (!d.fac && !d.firm && !d.marc && !d.nfac && !d.obs) delete state.docs[k];
+    guardar();
+    renderDocs();
+  });
+}
 function wirePend() {
   ['fpEmpresa', 'fpRuta', 'opOrden1', 'opOrden2', 'opOrden3'].forEach(function (id) { $(id).addEventListener('change', renderPend); });
   $('fpTexto').addEventListener('input', renderPend);
@@ -3098,11 +3253,12 @@ function refrescar(forzar) {
   if (vista === 'avance' || forzar) renderAvance();
   if (vista === 'mapa') renderMapa();
   if (vista === 'pend') renderPend();
+  if (vista === 'docs') renderDocs();
   if (vista === 'clientes' && !forzar) renderAvance();
 }
 function cambiarVista(v) {
   vista = v;
-  ['sif', 'avance', 'mapa', 'pend', 'clientes'].forEach(function (k) {
+  ['sif', 'avance', 'mapa', 'pend', 'docs', 'clientes'].forEach(function (k) {
     $('vista-' + k).hidden = k !== v;
     $('tab-' + k).setAttribute('aria-selected', String(k === v));
   });
@@ -3148,6 +3304,7 @@ function wire() {
   });
   wireMapa();
   wirePend();
+  wireDocs();
   $('selFecha').addEventListener('change', function (e) { fechaSel = e.target.value; refrescar(true); });
   ['fsEmpresa', 'fsSem', 'fsOrden'].forEach(function (id) { $(id).addEventListener('change', renderSif); });
   $('fsTexto').addEventListener('input', renderSif);
@@ -3195,7 +3352,7 @@ function wire() {
       if (!o || !Array.isArray(o.hr) || !Array.isArray(o.rd)) throw new Error('El archivo no es una copia de este programa.');
       var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros Roadmap, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
-      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
+      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
       state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Copia restaurada.');
     } catch (err) { avisar('No se pudo restaurar: ' + err.message, true); }
@@ -3255,7 +3412,7 @@ var ACCESO = { salt: 'cGHUFh6kHVdbanglkCjKGw==', iter: 150000, hash: 'weTN+Lcper
 var modoNube = false;
 var nube = { tipo: '', listo: false, db: null, dl: null, usuario: null, ts: 0, n: 0, subiendo: false, pendiente: false, ultimoJson: '', soloLectura: false, bajando: false, cola: null, intentos: 0, timerSondeo: null };
 var gh = { repo: '', rama: 'main', ruta: 'datos.gz', token: '' };
-var sb = { url: '', key: '' };
+var sb = { url: '', key: '', aviso: '' };
 function puedeEditar() { return !modoNube || !!nube.usuario; }
 /* ocultar / eliminar rutas cambia datos de todos: en GitHub solo lo hace quien tiene token */
 function puedeEscribirCompartido() { return !modoNube || (nube.tipo === 'github' ? (!!nube.usuario && !!gh.token) : (nube.tipo === 'supabase' ? !!nube.usuario : !nube.soloLectura)); }
@@ -3269,7 +3426,7 @@ async function comprimir(texto) { return aB64(await new Response(new Blob([texto
 async function descomprimirBuf(buf) { return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); }
 async function descomprimir(b64) { return descomprimirBuf(b64aBuf(b64)); }
 function armarPayload() {
-  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], cfg: state.cfg, kml: state.kml });
+  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], docs: state.docs || {}, cfg: state.cfg, kml: state.kml });
 }
 function horaCorta(ms) { return new Date(ms).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }); }
 function notaNube(t, mal) { var e = $('estNube'); if (e) { e.textContent = t; e.classList.toggle('mal', !!mal); } }
@@ -3289,7 +3446,7 @@ function urlDatos() { return new URL(gh.ruta.split('/').pop(), location.href.spl
 
 /* --- aplicar al programa lo que llega de la nube --- */
 function aplicarRemoto(o, meta) {
-  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || [];
+  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {};
   if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
   state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {});
   state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
@@ -3423,7 +3580,8 @@ async function sondearSupabase() {
   } catch (e) {
     console.error(e);
     nube.listo = true;
-    notaNube('No se pudo leer los datos compartidos (' + (e && e.message ? e.message : 'error') + '). Se reintenta solo.', true);
+    var falla = e && e.message === 'Failed to fetch' ? 'no se llegó a ' + sb.url + (sb.aviso ? '. ' + sb.aviso : ': revisa que la URL de config.json esté bien escrita y que el proyecto de Supabase esté activo') : (e && e.message ? e.message : 'error');
+    notaNube('No se pudo leer los datos compartidos (' + falla + '). Se reintenta solo.', true);
   } finally { nube.bajando = false; }
 }
 
@@ -3490,7 +3648,7 @@ function abrirLogin() {
       intentosLogin++;
       if (intentosLogin >= 5) { bloqueoLogin = Date.now() + 30000; intentosLogin = 0; }
       er.hidden = false; er.textContent = 'Contraseña incorrecta.';
-    } catch (e) { er.hidden = false; er.textContent = nube.tipo === 'supabase' ? 'No se pudo comprobar la contraseña con el servidor (' + (e && e.message ? e.message : 'error') + ').' : 'No se pudo verificar la contraseña en este navegador.'; }
+    } catch (e) { er.hidden = false; er.textContent = nube.tipo === 'supabase' ? 'No se pudo comprobar la contraseña: ' + (e && e.message === 'Failed to fetch' ? 'no se llegó a ' + sb.url + '. ' + (sb.aviso || 'Revisa la URL en config.json y que el proyecto de Supabase esté activo.') : (e && e.message ? e.message : 'error')) : 'No se pudo verificar la contraseña en este navegador.'; }
     c.querySelector('#lgSi').disabled = false;
   }
   c.querySelector('#lgNo').onclick = cerrarModal;
@@ -3515,7 +3673,13 @@ async function iniciarNube() {
     modoNube = true;
     try {
       var rc = await fetch(new URL('config.json', location.href.split('#')[0].split('?')[0]).href, { cache: 'no-cache' });
-      if (rc.ok) { var cj = await rc.json(); if (cj && cj.supabaseUrl && cj.supabaseKey) { sb.url = String(cj.supabaseUrl).replace(/\/+$/, ''); sb.key = String(cj.supabaseKey); } }
+      if (rc.ok) { var cj = await rc.json(); if (cj && cj.supabaseUrl && cj.supabaseKey) {
+        var u = String(cj.supabaseUrl).trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
+        if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+        sb.url = u; sb.key = String(cj.supabaseKey).trim();
+        if (/TU-PROYECTO|TU-CLAVE/i.test(sb.url + sb.key)) sb.aviso = 'config.json todavía tiene los valores de ejemplo: pon tu Project URL y tu clave anon.';
+        else if (!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(sb.url)) sb.aviso = 'La URL de config.json no parece de Supabase (' + sb.url + '). Debe ser como https://abcdefgh.supabase.co';
+      } }
     } catch (e) {}
     if (sb.url) nube.tipo = 'supabase'; else { nube.tipo = 'github'; cargarGh(); }
   } else return;
@@ -3551,7 +3715,7 @@ async function iniciar() {
   var ok = await DB.abrir();
   var g = await DB.get('estado');
   if (g && g.hr && g.rd) {
-    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
+    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.docs = g.docs || {}; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
     state.cfg = Object.assign(state.cfg, g.cfg || {}); migrarCfg(g.cfg);
     state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
   }
