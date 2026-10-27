@@ -888,7 +888,8 @@ function fmtHora(seg) {
 }
 function nombreEmpresa(cod) {
   if (!cod) return '';
-  return state.cfg.empresas[cod] || NOMBRES_EMPRESA_BASE[cod] || cod;
+  var sc = String(cod).replace(/^0+/, '');
+  return state.cfg.empresas[cod] || state.cfg.empresas[sc] || NOMBRES_EMPRESA_BASE[cod] || NOMBRES_EMPRESA_BASE[sc] || cod;
 }
 
 /* Fecha-hora a "reloj de Lima" en ms. Los textos ISO con Z vienen en UTC (Lima = UTC-5). */
