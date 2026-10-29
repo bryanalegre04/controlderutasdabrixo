@@ -472,9 +472,9 @@ td.c input[type=checkbox]:disabled { cursor: default; }
         <button class="btn-imp" type="button" data-imp="sic">Importar Excel Ruta SIF</button>
       </div>
       <div class="src">
-        <div class="src-top"><b>Roadmap</b><span class="src-sub">ruta, código, Hl_Programado</span></div>
+        <div class="src-top"><b>Hoja de ruta</b><span class="src-sub">ruta, código, viaje, entrega</span></div>
         <div class="src-estado" id="est-roadmap">Sin datos</div>
-        <button class="btn-imp" type="button" data-imp="roadmap">Importar Excel Roadmap</button>
+        <button class="btn-imp" type="button" data-imp="roadmap">Importar Hoja de ruta</button>
       </div>
       <div class="src">
         <div class="src-top"><b>Bees</b><span class="src-sub">status del pedido</span></div>
@@ -505,8 +505,16 @@ td.c input[type=checkbox]:disabled { cursor: default; }
     <details>
       <summary class="rail-h">Nombres de empresas</summary>
       <div>
-        <p class="nota-rail">El Roadmap trae solo el código de la empresa. Escribe el nombre que quieras ver.</p>
+        <p class="nota-rail">Si la hoja de ruta trae el código de la empresa, escribe el nombre que quieras ver. Escribe el nombre que quieras ver.</p>
         <div class="lista-emp" id="listaEmpresas"></div>
+      </div>
+    </details>
+
+    <details>
+      <summary class="rail-h">Empresa por ruta</summary>
+      <div>
+        <p class="nota-rail">La hoja de ruta ya no trae la empresa. Escribe aquí a qué empresa pertenece cada ruta (se recuerda para los próximos días).</p>
+        <div class="lista-emp" id="listaEmpRuta"></div>
       </div>
     </details>
 
@@ -551,10 +559,10 @@ td.c input[type=checkbox]:disabled { cursor: default; }
 
     <div id="vacio" class="panel vacio-grande" hidden>
       <h2>Importa tus tres archivos para empezar</h2>
-      <p>El semáforo de Ruta SIF se calcula con el tiempo en mercado del SIC. El avance de cada ruta sale de cruzar el Roadmap con Bees por código de cliente y fecha.</p>
+      <p>El semáforo de Ruta SIF se calcula con el tiempo en mercado del SIC. El avance de cada ruta sale de cruzar la hoja de ruta con Bees por código de cliente y fecha.</p>
       <div class="fuentes-grid">
         <div class="fuente-card"><b>Ruta SIF</b><span>Excel de retorno de unidades del SIC (hoja Data).</span><button class="btn primario" type="button" data-edit data-imp="sic">Importar Ruta SIF</button></div>
-        <div class="fuente-card"><b>Roadmap</b><span>Ruta, código de cliente, Entregado, Rechazo, Hl_Programado.</span><button class="btn primario" type="button" data-edit data-imp="roadmap">Importar Roadmap</button></div>
+        <div class="fuente-card"><b>Hoja de ruta</b><span>Ruta, vehículo, fecha, código de cliente, viaje, entrega.</span><button class="btn primario" type="button" data-edit data-imp="roadmap">Importar Roadmap</button></div>
         <div class="fuente-card"><b>Bees</b><span>poc_external_id, status y volúmenes por pedido.</span><button class="btn primario" type="button" data-edit data-imp="bees">Importar Bees</button></div>
       </div>
       <button class="btn" type="button" id="btnEjemplo2">Ver cómo se ve con datos de ejemplo</button>
@@ -599,7 +607,7 @@ td.c input[type=checkbox]:disabled { cursor: default; }
           </div>
           <div class="tabla-wrap"><table id="tablaSif"></table></div>
           <details id="detSinRuta" style="margin-top:14px" hidden>
-            <summary style="cursor:pointer;font-weight:600">Unidades del SIC que no están en el Roadmap <span class="txt-mut" id="contSinRuta"></span></summary>
+            <summary style="cursor:pointer;font-weight:600">Unidades del SIC que no están en la hoja de ruta <span class="txt-mut" id="contSinRuta"></span></summary>
             <div class="tabla-wrap" style="margin-top:10px"><table id="tablaSinRuta"></table></div>
           </details>
         </div>
@@ -653,7 +661,7 @@ td.c input[type=checkbox]:disabled { cursor: default; }
           <div class="heat-scroll"><div id="heatHora" class="heat-hora"></div></div>
         </div>
         <div class="panel" id="panelTracking">
-          <div class="panel-h"><h2>Tracking de la ruta</h2><p>Recorrido real del camión según la hora de llegada de Bees; el estado sale del cruce con el Roadmap</p></div>
+          <div class="panel-h"><h2>Tracking de la ruta</h2><p>Recorrido real del camión según la hora de llegada de Bees; el estado sale del cruce con la hoja de ruta</p></div>
           <div class="filtros" style="margin-bottom:12px"><select id="fmRuta" aria-label="Ruta a seguir"></select><div class="seg-vista" id="modoTrack" role="group" aria-label="Tipo de vista"><button type="button" data-modo="esq" aria-pressed="true">Esquema de ruta</button><button type="button" data-modo="geo" aria-pressed="false">Mapa geográfico</button></div></div>
           <div class="tiles" id="tilesTrack"></div>
           <div class="leyenda" id="leyTrack" style="margin-top:12px"></div>
@@ -670,17 +678,17 @@ td.c input[type=checkbox]:disabled { cursor: default; }
         </div>
         <div class="tiles tiles3" id="tilesPend"></div>
         <div class="panel">
-          <div class="panel-h"><div><h2>Clientes pendientes de entregar</h2><p>Volumen del Roadmap y cajas («Entrega Cjs»). No incluye los desplanificados.</p></div><span class="txt-mut" id="cntPend"></span></div>
+          <div class="panel-h"><div><h2>Clientes pendientes de entregar</h2><p>Volumen (Bees) y cajas («Entrega» de la hoja de ruta). No incluye los desplanificados.</p></div><span class="txt-mut" id="cntPend"></span></div>
           <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden1"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><span class="ms" id="ms-pend"></span><span class="ms" id="ms-r-pend"></span><button class="btn chico" type="button" data-exp-pend="pend">Exportar a Excel</button></div>
           <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaPend"></table></div>
         </div>
         <div class="panel">
-          <div class="panel-h"><div><h2>Alertas del Roadmap</h2><p>Clientes con alerta registrada en el Roadmap, del mayor al menor volumen.</p></div><span class="txt-mut" id="cntAlert"></span></div>
+          <div class="panel-h"><div><h2>Alertas</h2><p>Clientes con alerta registrada, del mayor al menor volumen (la hoja de ruta nueva no trae alertas).</p></div><span class="txt-mut" id="cntAlert"></span></div>
           <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden2"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><span class="ms" id="ms-alert"></span><span class="ms" id="ms-r-alert"></span><button class="btn chico" type="button" data-exp-pend="alert">Exportar a Excel</button></div>
           <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaAlert"></table></div>
         </div>
         <div class="panel">
-          <div class="panel-h"><div><h2>Rechazados o modificados parcialmente sin alerta</h2><p>Según Bees: rechazados o con entrega parcial que no tienen alerta en el Roadmap.</p></div><span class="txt-mut" id="cntNoAlert"></span></div>
+          <div class="panel-h"><div><h2>Rechazados o modificados parcialmente sin alerta</h2><p>Según Bees: rechazados o con entrega parcial que no tienen alerta.</p></div><span class="txt-mut" id="cntNoAlert"></span></div>
           <div class="filtros" style="margin-bottom:10px"><label class="inline-sel">Ordenar por <select id="opOrden3"><option value="hl">Volumen (hl)</option><option value="cajas">Cajas</option><option value="ruta">Ruta</option></select></label><span class="ms" id="ms-noalert"></span><span class="ms" id="ms-r-noalert"></span><button class="btn chico" type="button" data-exp-pend="noalert">Exportar a Excel</button></div>
           <div class="tabla-wrap" style="max-height:520px;overflow:auto"><table id="tablaNoAlert"></table></div>
         </div>
@@ -697,7 +705,7 @@ td.c input[type=checkbox]:disabled { cursor: default; }
         </div>
         <div class="tiles" id="tilesRec"></div>
         <div class="panel">
-          <div class="panel-h"><div><h2>Recargas del día</h2><p>Todas las rutas con viaje 2 o 3 en el Roadmap. El estado se calcula solo con Bees; puedes cambiarlo a mano. Clic en una fila para ver sus clientes.</p></div><span class="txt-mut" id="cntRec"></span></div>
+          <div class="panel-h"><div><h2>Recargas del día</h2><p>Todas las rutas con viaje 2 o 3 en la hoja de ruta. El estado se calcula solo con Bees; puedes cambiarlo a mano. Clic en una fila para ver sus clientes.</p></div><span class="txt-mut" id="cntRec"></span></div>
           <div class="filtros" style="margin-bottom:10px"><button class="btn chico" type="button" id="btnExpRec">Exportar a Excel</button></div>
           <div class="tabla-wrap" style="max-height:680px;overflow:auto"><table id="tablaRec"></table></div>
         </div>
@@ -930,7 +938,7 @@ var ALIAS_HR = {
   entregado: ['ENTREGADO'], alerta: ['ALERTA'], rechazo: ['RECHAZO'],
   motivoRechazo: ['MR', 'MOTIVORECH', 'MOTIVOBEES'],
   ruta: ['RUTA'], vehiculo: ['VEHICULO'], fecha: ['FECHA'], codigo: ['CODIGO'],
-  cliente: ['CLIENTE', 'CLIENTE2'], direccion: ['DIRECCION'], ciudad: ['CIUDAD'], viaje: ['VIAJE'],
+  cliente: ['CLIENTE', 'CLIENTE2'], direccion: ['DIRECCION'], ciudad: ['CIUDAD', 'DISTRITO'], viaje: ['VIAJE'],
   hlProgramado: ['HLPROGRAMADO'], hlFact: ['HLFACT'], hlEntr: ['HLENTR'], hlRech: ['HLRECH'], entregaCjs: ['ENTREGACJS'],
   cjasRechazado: ['CJASRECHAZADO'], empresa: ['EMPRESA'],
   zonaComercial: ['ZONAAC', 'ZONACOMERCIAL', 'ZONA', 'ZONAVENTAS', 'ZONAACTUAL', 'CODZONA'],
@@ -975,6 +983,67 @@ function extraerRoadmap(filas) {
       else if (campo === 'transporte' || campo === 'empresa' || campo === 'viaje') { if (!r[campo]) r[campo] = textoNumerico(v); }
       else { if (!r[campo]) r[campo] = String(v).trim(); }
     });
+    if (algo && r.codigo) out.push(r);
+  }
+  return out;
+}
+
+
+/* ---------- HOJA DE RUTA (reemplaza al Roadmap): Ruta, Vehículo, Fecha, Código, Tipo Cliente, ZN PVTA, ZN TVTA, Cliente,
+   Dirección, Abre, Cierra, Viaje, Dist, Sec, Entrega, Recojo, Llega, Sale, y al final distrito / longitud / latitud ---------- */
+var ALIAS_HOJA = {
+  ruta: ['RUTA'], vehiculo: ['VEHICULO', 'PLACA'], fecha: ['FECHA'], codigo: ['CODIGO', 'CODIGOCLIENTE'],
+  tipoCliente: ['TIPOCLIENTE'], zonaComercial: ['ZNPVTA'], znTvta: ['ZNTVTA'], cliente: ['CLIENTE'], direccion: ['DIRECCION'],
+  abre: ['ABRE'], cierra: ['CIERRA'], viaje: ['VIAJE'], dist: ['DISTKM', 'DIST'], sec: ['SEC', 'SECUENCIA'],
+  entregaCjs: ['ENTREGA', 'ENTREGACJS'], recojo: ['RECOJO'], llega: ['LLEGA'], sale: ['SALE'],
+  empresa: ['EMPRESA', 'TRANSPORTISTA', 'OPERADOR'], supervisor: ['SUPERVISOR'], transporte: ['TRANSPORTE'],
+  ciudad: ['DISTRITO', 'CIUDAD'], latitud: ['LATITUD', 'LAT'], longitud: ['LONGITUD', 'LON', 'LNG'], extra: ['SKU1', 'SKU2', 'SKU3']
+};
+function horaTexto(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v === 'number') { var sg = Math.round((v - Math.floor(v)) * 86400); return pad2(Math.floor(sg / 3600)) + ':' + pad2(Math.floor((sg % 3600) / 60)); }
+  var m = String(v).match(/(\d{1,2}):(\d{2})/);
+  return m ? pad2(+m[1]) + ':' + m[2] : '';
+}
+function extraerHojaRuta(filas) {
+  var enc = detectarEncabezado(filas, ALIAS_HOJA, ['ruta', 'codigo', 'viaje', 'entregaCjs'], 25);
+  if (!enc) return [];
+  var cols = Object.keys(enc.mapa).map(Number).sort(function (a, b) { return a - b; });
+  var out = [];
+  for (var i = enc.idx + 1; i < filas.length; i++) {
+    var fila = filas[i] || [];
+    var r = { entregado: '', alerta: '', rechazo: '', motivoRechazo: '', ruta: '', vehiculo: '', fecha: '', codigo: '',
+      cliente: '', direccion: '', ciudad: '', viaje: '', hlProgramado: 0, hlFact: null, entregaCjs: 0, cjasRechazado: 0,
+      empresa: '', zonaComercial: '', supervisor: '', agente: '', transporte: '', unidad: '', latitud: null, longitud: null, fechaAlerta: null, retro: '', hlEntr: null, hlRech: null,
+      sinHl: true, tipoCliente: '', znTvta: '', abre: '', cierra: '', secPlan: null, llegaPlan: '', salePlan: '', recojo: 0 };
+    var algo = false;
+    cols.forEach(function (j) {
+      var campo = enc.mapa[j], v = fila[j];
+      if (v === '' || v === null || v === undefined) return;
+      algo = true;
+      if (campo === 'fecha') { if (!r.fecha) r.fecha = convertirFecha(v); }
+      else if (campo === 'codigo') { if (!r.codigo) r.codigo = normalizarCodigo(v); }
+      else if (campo === 'entregaCjs') { if (!r.entregaCjs) r.entregaCjs = convertirNumero(v) || 0; }
+      else if (campo === 'recojo') { if (!r.recojo) r.recojo = convertirNumero(v) || 0; }
+      else if (campo === 'sec') { var sn = convertirNumero(v); if (sn !== null && r.secPlan === null) r.secPlan = sn; }
+      else if (campo === 'llega') { if (!r.llegaPlan) r.llegaPlan = horaTexto(v); }
+      else if (campo === 'sale') { if (!r.salePlan) r.salePlan = horaTexto(v); }
+      else if (campo === 'abre') { if (!r.abre) r.abre = horaTexto(v); }
+      else if (campo === 'cierra') { if (!r.cierra) r.cierra = horaTexto(v); }
+      else if (campo === 'dist') { /* distancia entre paradas: no se usa */ }
+      else if (campo === 'latitud' || campo === 'longitud') { var cv = convertirNumero(v); if (cv !== null && r[campo] === null) r[campo] = cv; }
+      else if (campo === 'extra') {
+        // en el archivo original estas columnas se llaman SKU 1/2/3 pero traen distrito, longitud y latitud
+        var nv = convertirNumero(v);
+        if (typeof v === 'number' || (nv !== null && /^-?\d+([.,]\d+)?$/.test(String(v).trim()))) {
+          if (nv !== null && nv < 0) { if (Math.abs(nv) > 40) { if (r.longitud === null) r.longitud = nv; } else if (r.latitud === null) r.latitud = nv; }
+        } else if (!r.ciudad) r.ciudad = String(v).trim();
+      }
+      else if (campo === 'viaje' || campo === 'empresa' || campo === 'transporte') { if (!r[campo]) r[campo] = textoNumerico(v); }
+      else if (campo === 'vehiculo') { if (!r.vehiculo) r.vehiculo = String(v).trim().replace(/^PE(?=[A-Z0-9]{3}-?\d{3}$)/i, ''); }
+      else { if (!r[campo]) r[campo] = String(v).trim(); }
+    });
+    r.unidad = r.tipoCliente;
     if (algo && r.codigo) out.push(r);
   }
   return out;
@@ -1139,6 +1208,9 @@ function cadenaKkaa(nombre, unidad) {
   var n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
   for (var i = 0; i < CADENAS.length; i++) if (CADENAS[i][1].test(n)) return CADENAS[i][0];
   var u = String(unidad || '').toUpperCase();
+  if (u.indexOf('SUPERMERCADO') !== -1) return 'Otro supermercado';
+  if (u.indexOf('CASH') !== -1 && u.indexOf('CARRY') !== -1) return 'Cash & Carry';
+  if (u.indexOf('T.C') === 0 || u.indexOf('TC ') === 0) return 'Otra tienda de conveniencia';
   if (u.indexOf('CST') !== -1 || u.indexOf('TDACON') !== -1) return 'Otra tienda de conveniencia';
   if (u.indexOf('SUP') !== -1 && u.indexOf('SUPERM') !== -1) return 'Otro supermercado';
   return '';
@@ -1219,6 +1291,7 @@ function construirUnificado() {
     var ruta = (hr && hr.ruta) || '';
     if (!ruta && vehiculo) ruta = rutaPorPlaca[fecha + '||' + placaClave(vehiculo)] || rutaPorPlacaUlt[placaClave(vehiculo)] || '';
     var empresa = (hr && hr.empresa) || '';
+    if (!empresa && ruta && state.cfg.empresaRuta && state.cfg.empresaRuta[ruta]) empresa = state.cfg.empresaRuta[ruta];
     if (!empresa && vehiculo) empresa = empPorPlaca[placaClave(vehiculo)] || '';
     if (!empresa && ruta) empresa = empPorRuta[ruta] || '';
     var vp = 0, ve = 0, vr = 0, estado = 'Pendiente', motivo = '', fuenteVol = '';
@@ -1231,7 +1304,12 @@ function construirUnificado() {
       else if (bve > 0 && bvr > 0) estado = 'Parcial';
       else if (bvr > 0) estado = 'Rechazado';
       // 2) los volúmenes salen siempre del Roadmap (Hl_Programado, HL_ENTR, HL_RECH); nunca de Bees
-      if (hr) {
+      if (hr && hr.sinHl) {   // la hoja de ruta no trae hectolitros: se usan los de Bees
+        vp = bvp; ve = bve; vr = bvr;
+        if (estado === 'Entregado' && !ve) { ve = vp; vr = 0; }
+        else if (estado === 'Rechazado' && !vr) { ve = 0; vr = vp; }
+        fuenteVol = 'bees';
+      } else if (hr) {
         vp = hr.hlProgramado || 0;
         if (hr.hlEntr !== null && hr.hlEntr !== undefined) { ve = hr.hlEntr || 0; vr = hr.hlRech || 0; }
         else if (estado === 'Entregado') { ve = vp; vr = 0; }
@@ -1262,6 +1340,7 @@ function construirUnificado() {
   });
   // rutas ocultas por el usuario: salen de todas las vistas (se pueden volver a mostrar)
   ocultasDia = {};
+  _uniTodo = _cacheUni;
   if (state.ocultas && state.ocultas.length) {
     var oc = {}; state.ocultas.forEach(function (k) { oc[k] = 1; });
     _cacheUni = _cacheUni.filter(function (r) {
@@ -1274,6 +1353,7 @@ function construirUnificado() {
   return _cacheUni;
 }
 var ocultasDia = {};
+var _uniTodo = null;
 function claveOculta(r) { return (r.fecha || '') + '||' + (r.ruta || '(Sin ruta)') + '||' + (r.viaje || '—'); }
 
 var METAS = { mrVolumen: 2.5, mrPedido: 9 };
@@ -1558,13 +1638,13 @@ function parseCsv(texto) {
   return filas;
 }
 
-var HINTS = { sic: ['data', 'sic', 'report', 'detalle'], roadmap: ['roadmap', 'hojadelbees'], bees: ['bees', 'routes', 'hojaderuta'] };
+var HINTS = { sic: ['data', 'sic', 'report', 'detalle'], roadmap: ['roadmap', 'hojadelbees', 'hojaderuta', 'hoja'], bees: ['bees', 'routes'] };
 var EXTRAER = {
   sic: function (f) { return extraerSic(f); },
-  roadmap: function (f) { var r = extraerRoadmap(f); return r.length ? r : null; },
+  roadmap: function (f) { var r = extraerRoadmap(f); if (!r.length) r = extraerHojaRuta(f); return r.length ? r : null; },
   bees: function (f) { var r = extraerBees(f); return r.length ? r : null; }
 };
-var NOM_TIPO = { sic: 'Ruta SIF', roadmap: 'Roadmap', bees: 'Bees' };
+var NOM_TIPO = { sic: 'Ruta SIF', roadmap: 'Hoja de ruta', bees: 'Bees' };
 
 async function leerArchivo(file, tipo) {
   // Devuelve una lista de resultados { tipo, datos }: un libro puede traer varias tablas
@@ -1626,19 +1706,19 @@ async function importarArchivos(files, tipo) {
     var lista = [];
     try { lista = await leerArchivo(f, tipo); } catch (e) { console.error(e); cerrarModal(); avisar('No se pudo leer ' + f.name + ': ' + e.message, true); continue; }
     cerrarModal();
-    if (!lista.length) { avisar('«' + f.name + '» no tiene una tabla de Ruta SIF, Roadmap ni Bees que se reconozca. Revisa que tenga los encabezados originales.', true); continue; }
+    if (!lista.length) { avisar('«' + f.name + '» no tiene una tabla de Ruta SIF, hoja de ruta ni Bees que se reconozca. Revisa que tenga los encabezados originales.', true); continue; }
     lista.forEach(function (res) {
       var det = lista.length === 1 && res.tipo !== tipo ? ' (detecté que era ' + NOM_TIPO[res.tipo] + ')' : '';
       if (res.tipo === 'roadmap') {
         var sinF = res.datos.filter(function (r) { return !r.fecha; });
         if (sinF.length) {   // el Roadmap no trae fecha legible: se asume la del día cargado en Bees/SIC
           var fdef = fechaSel || (state.rd.length ? state.rd[state.rd.length - 1].tourDate : '') || Object.keys(state.sic).sort().pop() || '';
-          if (fdef) { sinF.forEach(function (r) { r.fecha = fdef; }); resumen.push(sinF.length + ' filas del Roadmap no traían fecha: se asignó ' + formatearFecha(fdef)); }
+          if (fdef) { sinF.forEach(function (r) { r.fecha = fdef; }); resumen.push(sinF.length + ' filas de la hoja de ruta no traían fecha: se asignó ' + formatearFecha(fdef)); }
         }
         var m = combinar(state.hr, res.datos, function (r) { return r.fecha || ''; });
         state.hr = m.lista;
         res.datos.forEach(function (r) { if (r.fecha) fechasNuevas.push(r.fecha); });
-        resumen.push('Roadmap' + det + ': ' + m.agregados + ' nuevos, ' + m.actualizados + ' actualizados' + (m.ignorados ? ', ' + m.ignorados + ' ignorados por día cerrado' : ''));
+        resumen.push('Hoja de ruta' + det + ': ' + m.agregados + ' nuevos, ' + m.actualizados + ' actualizados' + (m.ignorados ? ', ' + m.ignorados + ' ignorados por día cerrado' : ''));
       } else if (res.tipo === 'bees') {
         var m2 = combinar(state.rd, res.datos, function (r) { return r.tourDate || ''; });
         state.rd = m2.lista;
@@ -1740,6 +1820,11 @@ function datosDia() {
   return uni;
 }
 
+function datosDiaTodos() {
+  construirUnificado();
+  return (_uniTodo || []).filter(function (r) { return r.fecha === fechaSel; });
+}
+
 function ocultarRuta(kAv) {
   state.ocultas = state.ocultas || [];
   var k = fechaSel + '||' + kAv;
@@ -1751,7 +1836,7 @@ async function eliminarRuta(kAv) {
   var partes = kAv.split('||'), clave = fechaSel + '||' + kAv;
   var filas = datosDia().filter(function (r) { return claveOculta(r) === clave; });
   var cods = {}; filas.forEach(function (r) { cods[r.codigo] = 1; });
-  var ok = await confirmar('Eliminar ruta', 'Se borrarán del programa los datos de la ruta ' + partes[0] + ' (viaje ' + partes[1] + ') del ' + formatearFecha(fechaSel) + ': ' + filas.length + ' clientes del Roadmap y de Bees. Si vuelves a importar el mismo archivo, regresarán. Si solo quieres dejar de verla, usa «Ocultar».', 'Eliminar');
+  var ok = await confirmar('Eliminar ruta', 'Se borrarán del programa los datos de la ruta ' + partes[0] + ' (viaje ' + partes[1] + ') del ' + formatearFecha(fechaSel) + ': ' + filas.length + ' clientes de la hoja de ruta y de Bees. Si vuelves a importar el mismo archivo, regresarán. Si solo quieres dejar de verla, usa «Ocultar».', 'Eliminar');
   if (!ok) return;
   state.hr = state.hr.filter(function (r) { return !(cods[r.codigo] && (remapFechasHR[r.fecha] || r.fecha) === fechaSel); });
   state.rd = state.rd.filter(function (r) { return !(cods[r.codigo] && r.tourDate === fechaSel); });
@@ -1807,7 +1892,15 @@ function renderRail() {
   var codigos = Array.from(new Set(state.hr.map(function (r) { return r.empresa; }).filter(Boolean))).sort();
   $('listaEmpresas').innerHTML = codigos.length ? codigos.map(function (c) {
     return '<label class="campo"><span>Código ' + esc(c) + '</span><input type="text" data-emp="' + esc(c) + '" value="' + esc(nombreEmpresa(c) === c ? '' : nombreEmpresa(c)) + '" placeholder="Nombre de la empresa"></label>';
-  }).join('') : '<p class="nota-rail">Aparecerán al importar el Roadmap.</p>';
+  }).join('') : '<p class="nota-rail">Aparecerán al importar la hoja de ruta.</p>';
+
+  var rutasHR = {}, fMax = '';
+  state.hr.forEach(function (r) { if (r.ruta && r.fecha && r.fecha > fMax) fMax = r.fecha; });
+  state.hr.forEach(function (r) { if (r.ruta && (!fMax || r.fecha === fMax)) rutasHR[r.ruta] = 1; });
+  var ers = state.cfg.empresaRuta || {};
+  $('listaEmpRuta').innerHTML = Object.keys(rutasHR).length ? Object.keys(rutasHR).sort().map(function (c) {
+    return '<label class="campo"><span>' + esc(c) + '</span><input type="text" data-emprut="' + esc(c) + '" value="' + esc(ers[c] || '') + '" placeholder="Empresa de la ruta"></label>';
+  }).join('') : '<p class="nota-rail">Aparecerán al importar la hoja de ruta.</p>';
 
   var abiertos = fechas.filter(function (f) { return state.cerrados.indexOf(f) === -1; });
   $('selCerrar').innerHTML = abiertos.length ? abiertos.map(function (f) { return '<option value="' + f + '">' + formatearFecha(f) + '</option>'; }).join('') : '<option value="">No hay días para cerrar</option>';
@@ -1822,16 +1915,16 @@ function setEstado(id, ok, texto) {
 }
 
 function diagRoadmap() {
-  if (!state.hr.length) return 'No hay ningún registro de Roadmap cargado: súbelo con «Roadmap» (Excel con las columnas Ruta, Código, Hl_Programado…).';
+  if (!state.hr.length) return 'No hay ninguna hoja de ruta cargada: súbela con «Importar Hoja de ruta» (Excel con las columnas Ruta, Vehículo, Fecha, Código, Viaje, Entrega…).';
   var c = {}; state.hr.forEach(function (r) { var f = r.fecha || 'sin fecha'; c[f] = (c[f] || 0) + 1; });
-  return 'El Roadmap cargado tiene ' + Object.keys(c).sort().map(function (f) { return c[f] + ' registros del ' + (f === 'sin fecha' ? f : formatearFecha(f)); }).join(', ') + '. Importa el Roadmap del ' + formatearFecha(fechaSel) + ' (o revisa la columna Fecha).';
+  return 'La hoja de ruta cargada tiene ' + Object.keys(c).sort().map(function (f) { return c[f] + ' registros del ' + (f === 'sin fecha' ? f : formatearFecha(f)); }).join(', ') + '. Importa la hoja de ruta del ' + formatearFecha(fechaSel) + ' (o revisa la columna Fecha).';
 }
 function renderAvisoRoadmap() {
   var el = $('avisoRoadmap'); if (!el) return;
   var uni = hayDatos() ? datosDia() : [];
   var sin = uni.filter(function (r) { return r.fuenteVol === 'sin-roadmap'; }).length;
   el.hidden = !sin;
-  if (sin) el.textContent = 'Faltan datos del Roadmap: ' + sin + ' de ' + uni.length + ' clientes del ' + formatearFecha(fechaSel) + ' están en Bees pero no en el Roadmap importado. Su volumen programado, entregado y sus cajas salen en 0. ' + diagRoadmap();
+  if (sin) el.textContent = 'Faltan datos de la hoja de ruta: ' + sin + ' de ' + uni.length + ' clientes del ' + formatearFecha(fechaSel) + ' están en Bees pero no en la hoja de ruta importada. Su volumen programado, entregado y sus cajas salen en 0. ' + diagRoadmap();
 }
 function renderCabecera() {
   var d = fechaSel ? new Date(fechaSel + 'T12:00:00') : null;
@@ -1844,7 +1937,7 @@ function renderCabecera() {
   var nRd = state.rd.filter(function (r) { return r.tourDate === fechaSel; }).length;
   $('pillsFuentes').innerHTML =
     '<span class="pill-src ' + (bl ? 'ok' : '') + '">' + (bl ? '✓' : '○') + ' Ruta SIF</span>' +
-    '<span class="pill-src ' + (nHr ? 'ok' : '') + '">' + (nHr ? '✓' : '○') + ' Roadmap' + (nHr ? ' · ' + nHr : '') + '</span>' +
+    '<span class="pill-src ' + (nHr ? 'ok' : '') + '">' + (nHr ? '✓' : '○') + ' Hoja de ruta' + (nHr ? ' · ' + nHr : '') + '</span>' +
     '<span class="pill-src ' + (nRd ? 'ok' : '') + '">' + (nRd ? '✓' : '○') + ' Bees' + (nRd ? ' · ' + nRd : '') + '</span>';
   $('avisoEjemplo').hidden = !hayEjemplo();
   $('btnEjemplo').textContent = hayEjemplo() ? 'Quitar datos de ejemplo' : 'Ver datos de ejemplo';
@@ -1921,7 +2014,7 @@ function renderSif() {
   });
   $('contSif').textContent = l.length + ' de ' + d.rutas.length + ' rutas';
   $('tablaSif').innerHTML = '<thead><tr><th>Ruta</th><th>Semáforo</th><th>Empresa</th><th>Placa</th><th>Viajes</th><th>Salida</th><th style="min-width:150px">Tiempo en mercado</th><th>Límite</th><th>Restante</th><th>Avance</th><th>Proyección</th><th>Horas planeadas</th><th>Estado</th></tr></thead><tbody>' +
-    (l.length ? l.map(function (x) { return filaSifHtml(x, cfg); }).join('') : '<tr><td colspan="13" class="vacio">' + (d.rutas.length ? 'Ninguna ruta coincide con los filtros.' : 'Esta fecha no tiene rutas. Importa el Roadmap o Bees de este día.') + '</td></tr>') + '</tbody>';
+    (l.length ? l.map(function (x) { return filaSifHtml(x, cfg); }).join('') : '<tr><td colspan="13" class="vacio">' + (d.rutas.length ? 'Ninguna ruta coincide con los filtros.' : 'Esta fecha no tiene rutas. Importa la hoja de ruta o Bees de este día.') + '</td></tr>') + '</tbody>';
 
   var sr = d.sinRuta;
   $('detSinRuta').hidden = !sr.length;
@@ -2065,7 +2158,7 @@ function renderAvance() {
   var mrV = vp > 0 ? vrt / vp * 100 : 0, mrP = n > 0 ? (cnt.Rechazado + cnt.Parcial) / n * 100 : 0;
   $('tilesCli').innerHTML =
     tile('Clientes programados', n, '') + tile('Entregados', cnt.Entregado, '', '--e-ent') + tile('Pendientes', cnt.Pendiente, '', '--e-pen') +
-    tile('Entrega parcial', cnt.Parcial, '', '--e-par') + tile('Rechazados', cnt.Rechazado, '', '--e-rec') + tile('Desplanificados', cnt.Desplanificado, 'en Roadmap, sin Bees', '--e-des');
+    tile('Entrega parcial', cnt.Parcial, '', '--e-par') + tile('Rechazados', cnt.Rechazado, '', '--e-rec') + tile('Desplanificados', cnt.Desplanificado, 'en hoja de ruta, sin Bees', '--e-des');
   $('tilesVol').innerHTML =
     tile('Volumen programado', fmtHl(vp), '') + tile('Volumen entregado', fmtHl(ve), '', '--e-ent') + tile('Volumen rechazado', fmtHl(vrt), 'solo pedidos rechazados', '--e-rec') +
     tileMeta('MR% volumen', mrV, METAS.mrVolumen) + tileMeta('MR% pedido', mrP, METAS.mrPedido);
@@ -2118,7 +2211,7 @@ function renderAvance() {
   // anomalías
   var anom = filtrado.filter(function (r) { return (r.volumenEntregado || 0) > (r.volumenProgramado || 0) + 0.02; })
     .sort(function (a, b) { return (b.volumenEntregado - b.volumenProgramado) - (a.volumenEntregado - a.volumenProgramado); });
-  $('panelAnomalias').innerHTML = anom.length ? '<div class="panel"><div class="panel-h"><h2 class="txt-warn">' + anom.length + ' cliente' + (anom.length === 1 ? '' : 's') + ' con volumen entregado mayor al programado</h2><p>Revisa que el código cruce bien entre Roadmap y Bees.</p></div><div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Cliente</th><th>Ruta</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Diferencia</th></tr></thead><tbody>' +
+  $('panelAnomalias').innerHTML = anom.length ? '<div class="panel"><div class="panel-h"><h2 class="txt-warn">' + anom.length + ' cliente' + (anom.length === 1 ? '' : 's') + ' con volumen entregado mayor al programado</h2><p>Revisa que el código cruce bien entre la hoja de ruta y Bees.</p></div><div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Cliente</th><th>Ruta</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Diferencia</th></tr></thead><tbody>' +
     anom.slice(0, 50).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + esc(r.ruta) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-warn">+' + fmtHl(r.volumenEntregado - r.volumenProgramado) + '</td></tr>'; }).join('') + '</tbody></table></div></div>' : '';
 
   renderClientes(filtrado);
@@ -2167,11 +2260,11 @@ var CATS = [
   { k: 'atendido', t: 'Atendido', d: 'Entregado completo' },
   { k: 'enatencion', t: 'En atención', d: 'El camión ya llegó y está atendiendo' },
   { k: 'pendiente', t: 'Pendiente', d: 'Aún no visitado' },
-  { k: 'alertado', t: 'Alertado', d: 'Tiene alerta registrada en el Roadmap' },
+  { k: 'alertado', t: 'Alertado', d: 'Tiene alerta registrada' },
   { k: 'modificado', t: 'Modificado', d: 'Reprogramado durante la ruta' },
   { k: 'parcial', t: 'Entrega parcial', d: 'Se entregó solo una parte' },
   { k: 'rechazado', t: 'Rechazado', d: 'Pedido rechazado' },
-  { k: 'desplanificado', t: 'Desplanificado', d: 'Está en el Roadmap pero no en Bees' }
+  { k: 'desplanificado', t: 'Desplanificado', d: 'Está en la hoja de ruta pero no en Bees' }
 ];
 var CAT_T = {}; CATS.forEach(function (c) { CAT_T[c.k] = c; });
 var catsActivas = {};
@@ -2373,7 +2466,7 @@ function renderTracking(g) {
     tile('Atención media', minTxt(R.atencionMed), 'tiempo en cada cliente') +
     tile('Traslado medio', minTxt(R.traslMed), 'entre un cliente y el siguiente') +
     tile('Ritmo', R.ritmo !== null ? fmtNum(R.ritmo, 1) + ' vis/h' : '—', 'desde la primera llegada') +
-    tile('Alertas', c.alertado, 'con alerta en Roadmap', '--c-alertado') +
+    tile('Alertas', c.alertado, 'con alerta', '--c-alertado') +
     tile('Modificados', c.modificado, 'reprogramados', '--c-modificado') +
     tile('Rechazados', c.rechazado, c.parcial + ' parciales', '--c-rechazado');
   $('leyTrack').innerHTML = CATS.map(function (k) { return '<span style="display:inline-flex;align-items:center;gap:6px"><span class="sw c-' + k.k + '"></span>' + k.t + '</span>'; }).join('') +
@@ -2708,7 +2801,7 @@ function actualizarBarraGeo(g) {
   var pts = puntosGeo(g), total = g.recorrido.length;
   var pend = g.recorrido.filter(function (s) { var r = s.r; return !coordCliente(r) && (r.direccion || r.ciudad); }).length;
   var hayDir = g.recorrido.some(function (s) { return s.r.direccion || s.r.ciudad; });
-  b.textContent = !geoCola.corriendo && !pts.length && !hayDir ? 'Los clientes de esta ruta no traen dirección ni coordenadas (la dirección sale del Roadmap). Carga tus mapas KML con «Cargar KML» o importa el Excel del Roadmap.' : geoCola.corriendo ? 'Ubicando clientes… ' + geoCola.hechos + ' de ' + geoCola.total + ' direcciones' : (pts.length + ' de ' + total + ' clientes ubicados (' + ['kml', 'roadmap', 'busqueda'].map(function (o) { var n = pts.filter(function (p) { return p.origen === o; }).length; return n ? n + (o === 'kml' ? ' por KML' : (o === 'roadmap' ? ' por Roadmap' : ' por búsqueda de dirección')) : ''; }).filter(Boolean).join(', ') + ')' + (pts.some(function (p) { return p.aprox; }) ? ' · los círculos punteados son aproximados (solo se halló el distrito)' : ''));
+  b.textContent = !geoCola.corriendo && !pts.length && !hayDir ? 'Los clientes de esta ruta no traen dirección ni coordenadas (la dirección sale de la hoja de ruta). Carga tus mapas KML con «Cargar KML» o importa la hoja de ruta.' : geoCola.corriendo ? 'Ubicando clientes… ' + geoCola.hechos + ' de ' + geoCola.total + ' direcciones' : (pts.length + ' de ' + total + ' clientes ubicados (' + ['kml', 'roadmap', 'busqueda'].map(function (o) { var n = pts.filter(function (p) { return p.origen === o; }).length; return n ? n + (o === 'kml' ? ' por KML' : (o === 'roadmap' ? ' por hoja de ruta' : ' por búsqueda de dirección')) : ''; }).filter(Boolean).join(', ') + ')' + (pts.some(function (p) { return p.aprox; }) ? ' · los círculos punteados son aproximados (solo se halló el distrito)' : ''));
   var bu = $('btnUbicar'), bc = $('btnUbicarCancel');
   if (bu) { bu.disabled = geoCola.corriendo || pend === 0; bu.textContent = pend === 0 && !geoCola.corriendo ? 'Clientes ubicados' : 'Ubicar clientes (' + pend + ')'; }
   if (bc) bc.hidden = !geoCola.corriendo;
@@ -2719,7 +2812,7 @@ function renderGeo(g, sv) {
     if (miniMapa) miniMapa.destruir();
     sv.innerHTML = '<div class="geo-barra"><button type="button" class="btn primario chico" id="btnUbicar">Ubicar clientes</button><button type="button" class="btn chico" id="btnUbicarCancel" hidden>Cancelar</button><button type="button" class="btn chico" id="btnKmlGeo">Cargar KML</button><span id="geoEstado" class="txt-mut"></span></div>' +
       '<div class="mm" id="mapaGeo" aria-label="Mapa geográfico de la ruta ' + esc(g.ruta) + '"></div>' +
-      '<p class="txt-mut" style="margin:8px 0 0;font-size:12.5px">Las ubicaciones salen primero de tus mapas KML (se cruzan por código o nombre del cliente), luego de la latitud y longitud del Roadmap. Para los que falten, «Ubicar clientes» busca cada dirección en servicios abiertos basados en OpenStreetMap (Nominatim y Photon; les envía la dirección y el distrito, una por segundo). En Perú las direcciones con manzana y lote suelen ubicarse de forma aproximada.</p>';
+      '<p class="txt-mut" style="margin:8px 0 0;font-size:12.5px">Las ubicaciones salen primero de tus mapas KML (se cruzan por código o nombre del cliente), luego de la latitud y longitud de la hoja de ruta. Para los que falten, «Ubicar clientes» busca cada dirección en servicios abiertos basados en OpenStreetMap (Nominatim y Photon; les envía la dirección y el distrito, una por segundo). En Perú las direcciones con manzana y lote suelen ubicarse de forma aproximada.</p>';
     miniMapa = new MiniMapa($('mapaGeo'));
     miniMapa.ruta = g.ruta;
     $('btnUbicar').onclick = function () { ubicarClientes(g); };
@@ -2966,7 +3059,7 @@ function mostrarInformeKml(informes) {
     if (cl.length) inf.pts.forEach(function (q) { if (cl.some(function (x) { return coincideNombre(normNombre(x.cliente), q.c); })) ptsEnc++; });
     h += '<p><b>' + esc(inf.archivo) + '</b>' + (inf.meta ? ' · ruta ' + esc(inf.meta.ruta) + ' · viaje ' + esc(inf.meta.viaje) + ' · ' + formatearFecha(inf.meta.fecha) : '') + '<br>' + inf.puntos + ' puntos' + (inf.lineas ? ' · ' + inf.lineas + ' líneas o zonas' : '') + '</p>';
     if (inf.meta && cl.length) h += '<p>Esa ruta tiene <b>' + cl.length + ' clientes</b> cargados; <b>' + enc + ' quedaron ubicados</b> con este KML (' + ptsEnc + ' de ' + inf.puntos + ' puntos del KML cruzaron con un cliente).</p>';
-    else if (inf.meta) h += '<p class="txt-bad">Todavía no hay clientes cargados de la ruta ' + esc(inf.meta.ruta) + ' para el ' + formatearFecha(inf.meta.fecha) + '. Importa el Roadmap/Bees de ese día y se ubicarán solos.</p>';
+    else if (inf.meta) h += '<p class="txt-bad">Todavía no hay clientes cargados de la ruta ' + esc(inf.meta.ruta) + ' para el ' + formatearFecha(inf.meta.fecha) + '. Importa la hoja de ruta/Bees de ese día y se ubicarán solos.</p>';
     else h += '<p class="txt-mut">El nombre del archivo no tiene el formato RUTA_VIAJE_FECHA (por ejemplo BK3579_1_2026-10-23.kml); se cruzará por el nombre del cliente en cualquier ruta.</p>';
     h += '<div class="tabla-wrap" style="max-height:230px;overflow:auto"><table class="mini-t"><thead><tr><th>Punto del KML</th><th>Coordenadas</th><th>Cliente encontrado</th></tr></thead><tbody>' +
       inf.ejemplos.map(function (p) {
@@ -3062,7 +3155,7 @@ function renderPend() {
     tile('Pendientes de entregar', L.pend.length, fmtHl(sp.hl) + ' · ' + fmtCjs(sp.cj) + ' cajas', '--c-pendiente') +
     tile('Alertados', L.alert.length, fmtHl(sa.hl) + ' · ' + fmtCjs(sa.cj) + ' cajas', '--c-alertado') +
     tile('Rechazados o parciales sin alerta', L.noAlert.length, fmtHl(sn.hl) + ' · ' + fmtCjs(sn.cj) + ' cajas', '--c-rechazado');
-  $('notaPend').textContent = datosDia().some(function (r) { return r.entregaCjs; }) ? '' : 'Este día no trae cajas: se leen de la columna «Entrega Cjs» del Roadmap.';
+  $('notaPend').textContent = datosDia().some(function (r) { return r.entregaCjs; }) ? '' : 'Este día no trae cajas: se leen de la columna «Entrega» de la hoja de ruta.';
 
   tablaPend('tablaPend', ordenarPend(L.pend, $('opOrden1').value),
     '<th>Situación</th><th>Hora de salida</th>',
@@ -3076,7 +3169,7 @@ function renderPend() {
 
   var rech = L.noAlert.filter(function (r) { return r.estado === 'Rechazado'; }).length, par = L.noAlert.length - rech;
   tablaPend('tablaNoAlert', ordenarPend(L.noAlert, $('opOrden3').value),
-    '<th>Tipo</th><th>Estado en Bees</th><th>Motivo (Roadmap)</th>',
+    '<th>Tipo</th><th>Estado en Bees</th><th>Motivo</th>',
     function (r) { return '<td><span class="etq e-' + r.estado + '">' + (r.estado === 'Parcial' ? 'Modificado parcial' : 'Rechazado') + '</span></td><td>' + esc(statusBeesTxt(r)) + '</td><td class="txt-mut" style="max-width:300px">' + esc(r.motivoRechazo || '—') + '</td>'; });
   $('cntNoAlert').textContent = L.noAlert.length + ' clientes (' + rech + ' rechazados, ' + par + ' parciales) · ' + fmtHl(sn.hl) + ' · ' + fmtCjs(sn.cj) + ' cajas';
 }
@@ -3147,7 +3240,7 @@ function etqDoc(est) {
 }
 function renderDocs() {
   var l = listaDocs(), s = resumenDocs(l), edit = puedeEditar();
-  $('notaDocs').textContent = edit ? 'Cadenas detectadas por el nombre del cliente y por la unidad de negocio del Roadmap (tiendas de conveniencia y supermercados).' : 'Solo lectura: el editor marca las facturas y marcajes (botón «Desbloquear con contraseña»).';
+  $('notaDocs').textContent = edit ? 'Cadenas detectadas por el nombre del cliente y por la tipo de cliente de la hoja de ruta (tiendas de conveniencia y supermercados).' : 'Solo lectura: el editor marca las facturas y marcajes (botón «Desbloquear con contraseña»).';
   $('tilesDocs').innerHTML =
     tile('Clientes de cadenas', s.n, fmtHl(s.hl) + ' programados') + tile('Entregados', s.ent, s.rech + ' rechazados · ' + s.pend + ' por entregar', '--e-ent') +
     tile('Facturas entregadas', s.fac + ' / ' + s.ent, s.ent ? fmtPct(s.fac / s.ent * 100) : '') + tile('Facturas firmadas', s.firm + ' / ' + s.ent, s.ent ? fmtPct(s.firm / s.ent * 100) : '') +
@@ -3200,7 +3293,7 @@ function wireDocs() {
     renderDocs();
   });
 }
-/* ---------------- recargas: viajes 2 y 3 del Roadmap ---------------- */
+/* ---------------- recargas: viajes 2 y 3 de la hoja de ruta ---------------- */
 var expRec = {};
 var NOM_REC = { ejecutada: 'Ejecutada', enejecucion: 'En ejecución', noejecutada: 'No ejecutada' };
 var CLS_REC = { ejecutada: 'verde', enejecucion: 'amarillo', noejecutada: 'gris' };
@@ -3210,9 +3303,9 @@ function estadoAutoRec(g) {
   return g.pendientes === 0 ? 'ejecutada' : 'enejecucion';
 }
 function recargasDia() {
-  var uni = datosDia(), grupos = agregarPorRuta(uni, true), v1 = {}, porK = {};
+  var uni = datosDiaTodos(), grupos = agregarPorRuta(uni, true), v1 = {}, porK = {};
   grupos.forEach(function (g) { if (String(g.viaje) === '1') v1[g.ruta] = g; });
-  var hlRoad = {};   // el volumen de una recarga es el del Roadmap, aunque Bees todavía no la traiga
+  var hlRoad = {};   // el volumen de una recarga se toma de la hoja de ruta si lo trae, aunque Bees todavía no la traiga
   calcularRemapFechas();
   state.hr.forEach(function (h) { if (h.codigo && (remapFechasHR[h.fecha] || h.fecha) === fechaSel) hlRoad[h.codigo] = (hlRoad[h.codigo] || 0) + (h.hlProgramado || 0); });
   uni.forEach(function (r) { var k = (r.ruta || '(Sin ruta)') + '||' + (r.viaje || '—'); (porK[k] = porK[k] || []).push(r); });
@@ -3220,7 +3313,7 @@ function recargasDia() {
     var cl = porK[g.ruta + '||' + g.viaje] || [];
     g.lista = cl;
     cl.forEach(function (r) { r.hlRoad = hlRoad[r.codigo] || 0; });
-    g.volP = cl.reduce(function (a, r) { return a + r.hlRoad; }, 0);
+    g.volP = cl.reduce(function (a, r) { return a + (r.hlRoad || r.volumenProgramado || 0); }, 0);
     g.cajas = cl.reduce(function (a, r) { return a + (r.entregaCjs || 0); }, 0);
     g.v1 = v1[g.ruta] || null;
     g.supervisor = (cl.find(function (r) { return r.supervisor; }) || {}).supervisor || '';
@@ -3260,7 +3353,7 @@ function renderRecargas() {
   $('cntRec').textContent = l.length + ' recarga' + (l.length === 1 ? '' : 's');
   var dis = edit ? '' : ' disabled';
   var html = '<thead><tr><th>Ruta</th><th>Viaje</th><th>Placa</th><th>Empresa</th><th class="r">Clientes</th><th class="r">Volumen</th><th class="r">Cajas</th><th class="r">Viaje 1</th><th style="min-width:150px">Avance de la recarga</th><th>Inicio</th><th>Último fin</th><th>Estado</th><th>Cambiar estado</th><th>Observación</th></tr></thead><tbody>';
-  if (!l.length) html += '<tr><td colspan="14" class="vacio">' + (R.todas.length ? 'No hay recargas con estos filtros.' : 'El Roadmap de este día no trae viajes 2 ni 3.') + '</td></tr>';
+  if (!l.length) html += '<tr><td colspan="14" class="vacio">' + (R.todas.length ? 'No hay recargas con estos filtros.' : 'La hoja de ruta de este día no trae viajes 2 ni 3.') + '</td></tr>';
   l.forEach(function (g) {
     var k = claveRec(g), ab = !!expRec[k], ke = esc(k);
     html += '<tr class="fila-click" data-rec="' + ke + '"><td><span class="cel-ruta">' + (ab ? '▾ ' : '▸ ') + esc(g.ruta) + '</span></td><td class="num"><span class="etq-v">V' + esc(g.viaje) + '</span></td><td class="num">' + esc(g.vehiculo) + '</td><td>' + esc(nombreEmpresa(g.empresa)) + '</td>' +
@@ -3460,6 +3553,13 @@ function wire() {
       if (v) state.cfg.empresas[c] = v; else delete state.cfg.empresas[c];
       guardar(); refrescar(true); return;
     }
+    var ir = e.target.closest('[data-emprut]');
+    if (ir) {
+      var vr = ir.value.trim(), cr = ir.getAttribute('data-emprut');
+      state.cfg.empresaRuta = state.cfg.empresaRuta || {};
+      if (vr) state.cfg.empresaRuta[cr] = vr; else delete state.cfg.empresaRuta[cr];
+      invalidar(); guardar(); refrescar(true); return;
+    }
     var inp = e.target.closest('[data-manual]');
     if (!inp) return;
     var k = claveManual(fechaSel, inp.getAttribute('data-manual'));
@@ -3493,7 +3593,7 @@ function wire() {
     try {
       var o = JSON.parse(await f.text());
       if (!o || !Array.isArray(o.hr) || !Array.isArray(o.rd)) throw new Error('El archivo no es una copia de este programa.');
-      var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros Roadmap, ' + o.rd.length + ' Bees).', 'Restaurar');
+      var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros de hoja de ruta, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
       state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
       state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
@@ -3507,7 +3607,7 @@ function wire() {
   $('btnEjemplo').addEventListener('click', alternarEjemplo);
   $('btnEjemplo2').addEventListener('click', alternarEjemplo);
   $('btnBorrarBusq').addEventListener('click', function () {
-    confirmar('Borrar ubicaciones buscadas', 'Se borrarán las ubicaciones que salieron de la búsqueda de direcciones (no las del KML ni las del Roadmap). Podrás volver a buscarlas.', 'Borrar').then(function (ok) {
+    confirmar('Borrar ubicaciones buscadas', 'Se borrarán las ubicaciones que salieron de la búsqueda de direcciones (no las del KML ni las de la hoja de ruta). Podrás volver a buscarlas.', 'Borrar').then(function (ok) {
       if (!ok) return; state.geo = {}; guardar(); refrescar(true); avisar('Ubicaciones buscadas borradas.');
     });
   });
@@ -3517,7 +3617,7 @@ function wire() {
     });
   });
   $('btnVaciar').addEventListener('click', function () {
-    confirmar('Vaciar todo', 'Se borrarán Roadmap, Bees, Ruta SIF, días cerrados y horas planeadas de este navegador. Esta acción no se puede deshacer. ¿Ya descargaste una copia?', 'Vaciar todo').then(function (ok) {
+    confirmar('Vaciar todo', 'Se borrarán hoja de ruta, Bees, Ruta SIF, días cerrados y horas planeadas de este navegador. Esta acción no se puede deshacer. ¿Ya descargaste una copia?', 'Vaciar todo').then(function (ok) {
       if (!ok) return;
       state.hr = []; state.rd = []; state.sic = {}; state.cerrados = []; state.cfg.manual = {}; state.geo = {}; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; _kmlIdx = null; _kmlMemo = {};
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Todo vaciado.');
