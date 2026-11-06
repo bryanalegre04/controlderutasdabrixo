@@ -457,6 +457,11 @@ td.c input[type=checkbox]:disabled { cursor: default; }
 .dh-mc small { color: var(--ink-3); font-size: 12px; }
 .dh-up { color: var(--e-ent); font-weight: 600; } .dh-down { color: var(--e-rec); font-weight: 600; }
 
+.in-hl-w { display: inline-flex; align-items: center; gap: 4px; }
+.in-hl { width: 74px; text-align: right; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: inherit; background: var(--surface); color: var(--bad, #C0342C); }
+.in-hl.manual { border-color: #E08A1E; background: #FFF6E6; font-weight: 600; }
+.in-hl:disabled { border-color: transparent; background: transparent; }
+
 </style>
 </head>
 <body>
@@ -1075,6 +1080,7 @@ var state = {
   sic: {},           // SIC por fecha: { 'AAAA-MM-DD': { run, filas:[...] } }
   cerrados: [],      // días cerrados (no se tocan al importar)
   hl: [],            // HL por cliente (Excel de recarga/carga): {fecha, ruta, viaje, codigo, cliente, hl, hlBeer, hlNabs, cajas, placa}
+  hlRechMan: {},     // HL rechazado corregido a mano por cliente: 'fecha||codigo' -> hl
   hlEmp: {},         // empresa por ruta, tomada de la hoja CARGA del Excel de recarga
   recargas: {},      // control manual de recargas (viaje 2 y 3): 'AAAA-MM-DD||ruta||viaje' -> {est, obs}
   docs: {},          // control de facturas y marcajes por cliente: 'AAAA-MM-DD||código' -> {fac, firm, marc, nfac, obs}
@@ -1644,10 +1650,17 @@ function construirUnificado() {
       motivo = hr.motivoRechazo || '';
     }
     // TODO el hectolitraje sale del Excel de recarga (nunca de Bees): entregado y parcial = HL completo; rechazo total = HL completo
+    var rechManual = false;
     if (hlFechas[fecha]) {
       vp = hlr ? hlr.hl : 0;
-      ve = (estado === 'Entregado' || estado === 'Parcial') ? vp : 0;
-      vr = estado === 'Rechazado' ? vp : 0;
+      var atendido = estado === 'Entregado' || estado === 'Parcial' || estado === 'Rechazado';
+      var man = state.hlRechMan ? state.hlRechMan[fecha + '||' + codigo] : undefined;
+      if (hlr && man !== undefined) {   // corrección manual del HL rechazado: el resto de lo programado cuenta como entregado
+        vr = Math.min(Math.max(+man || 0, 0), vp); ve = atendido ? vp - vr : 0; rechManual = true;
+      } else {
+        ve = (estado === 'Entregado' || estado === 'Parcial') ? vp : 0;
+        vr = estado === 'Rechazado' ? vp : 0;
+      }
       fuenteVol = hlr ? 'hl' : 'sin-hl';
     } else if (!(hr && !hr.sinHl)) { vp = 0; ve = 0; vr = 0; fuenteVol = 'sin-hl'; }
     return {
@@ -1657,7 +1670,7 @@ function construirUnificado() {
       alerta: !!(hr && hr.alerta === 'Sí'), zonaComercial: (hr && hr.zonaComercial) || '', supervisor: (hr && hr.supervisor) || '',
       transporte: (hr && hr.transporte) || (rd && rd.tour) || '',
       volumenProgramado: vp, volumenEntregado: ve, volumenRechazado: vr,
-      estado: estado, fuenteVol: fuenteVol, sinHoja: !!(rd && !hr), conHl: !!hlr, motivoRechazo: motivo, status: rd ? rd.status : '',
+      estado: estado, fuenteVol: fuenteVol, rechManual: rechManual, sinHoja: !!(rd && !hr), conHl: !!hlr, motivoRechazo: motivo, status: rd ? rd.status : '',
       rdIni: rd ? rd.tripStartMs : null, rdUlt: rd ? rd.lastMs : null,
       visita: rd ? rd.visita : null, ordenOrig: rd ? rd.ordenOrig : null, llegadaMs: rd ? rd.llegadaMs : null, finMs: rd ? rd.finMs : null,
       reprog: rd ? (rd.reprog || 0) : 0, motivoReprog: rd ? (rd.motivoReprog || '') : '', dentroRadio: rd ? rd.dentroRadio : '',
@@ -1705,7 +1718,8 @@ function agregarPorRuta(lista, porViaje) {
     g.volP += r.volumenProgramado || 0;
     g.volE += r.volumenEntregado || 0;
     g.volR += r.volumenRechazado || 0;
-    if (r.estado === 'Rechazado' || (r.fuenteVol === 'roadmap' && r.volumenRechazado > 0 && r.volumenRechazado >= r.volumenProgramado * 0.999)) g.volRTotal += r.volumenRechazado || 0;
+    if (r.fuenteVol === 'hl') g.volRTotal += r.volumenRechazado || 0;
+    else if (r.estado === 'Rechazado' || (r.fuenteVol === 'roadmap' && r.volumenRechazado > 0 && r.volumenRechazado >= r.volumenProgramado * 0.999)) g.volRTotal += r.volumenRechazado || 0;
   });
   return Object.keys(mapa).map(function (k) {
     var g = mapa[k];
@@ -2166,6 +2180,12 @@ function datosDiaTodos() {
   return (_uniTodo || []).filter(function (r) { return r.fecha === fechaSel; });
 }
 
+function celdaRech(r) {
+  if (r.fuenteVol !== 'hl') return fmtHl(r.volumenRechazado);
+  var dis = (!puedeEditar() || !(r.volumenProgramado > 0)) ? ' disabled' : '';
+  return '<span class="in-hl-w"><input type="number" class="in-hl' + (r.rechManual ? ' manual' : '') + '" step="0.01" min="0" max="' + r.volumenProgramado.toFixed(3) + '" value="' + (+r.volumenRechazado.toFixed(3)) + '" data-hlrech="' + esc(r.fecha + '||' + r.codigo) + '" data-max="' + r.volumenProgramado + '"' + dis + ' title="HL programado: ' + fmtHl(r.volumenProgramado) + (r.rechManual ? ' · corregido a mano' : '') + '"> hl' +
+    (r.rechManual && !dis ? '<button type="button" class="btn-ic" data-hlrech-reset="' + esc(r.fecha + '||' + r.codigo) + '" title="Volver al valor automático">↺</button>' : '') + '</span>';
+}
 function ocultarRuta(kAv) {
   state.ocultas = state.ocultas || [];
   var k = fechaSel + '||' + kAv;
@@ -2495,14 +2515,14 @@ function renderAvance() {
 
   var cnt = { Entregado: 0, Parcial: 0, Rechazado: 0, Pendiente: 0, Desplanificado: 0 };
   var vp = 0, ve = 0, vrt = 0;
-  filtrado.forEach(function (r) { cnt[r.estado]++; vp += r.volumenProgramado || 0; ve += r.volumenEntregado || 0; if (r.estado === 'Rechazado') vrt += r.volumenRechazado || 0; });
+  filtrado.forEach(function (r) { cnt[r.estado]++; vp += r.volumenProgramado || 0; ve += r.volumenEntregado || 0; if (r.estado === 'Rechazado' || r.fuenteVol === 'hl') vrt += r.volumenRechazado || 0; });
   var n = filtrado.length;
   var mrV = vp > 0 ? vrt / vp * 100 : 0, mrP = n > 0 ? (cnt.Rechazado + cnt.Parcial) / n * 100 : 0;
   $('tilesCli').innerHTML =
     tile('Clientes programados', n, '') + tile('Entregados', cnt.Entregado, '', '--e-ent') + tile('Pendientes', cnt.Pendiente, '', '--e-pen') +
     tile('Entrega parcial', cnt.Parcial, '', '--e-par') + tile('Rechazados', cnt.Rechazado, '', '--e-rec') + tile('Desplanificados', cnt.Desplanificado, 'en hoja de ruta, sin Bees', '--e-des');
   $('tilesVol').innerHTML =
-    tile('Volumen programado', fmtHl(vp), '') + tile('Volumen entregado', fmtHl(ve), '', '--e-ent') + tile('Volumen rechazado', fmtHl(vrt), 'solo pedidos rechazados', '--e-rec') +
+    tile('Volumen programado', fmtHl(vp), '') + tile('Volumen entregado', fmtHl(ve), '', '--e-ent') + tile('Volumen rechazado', fmtHl(vrt), 'rechazos totales (editable por cliente)', '--e-rec') +
     tileMeta('MR% volumen', mrV, METAS.mrVolumen) + tileMeta('MR% pedido', mrP, METAS.mrPedido);
 
   // donut
@@ -2544,7 +2564,7 @@ function renderAvance() {
       '<td class="r num ' + (g.mrVolumen <= METAS.mrVolumen ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrVolumen) + '</td><td class="r num ' + (g.mrPedido <= METAS.mrPedido ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrPedido) + '</td><td class="acc-fila"><button type="button" class="btn-ic" data-w data-ocultar="' + esc(kAv) + '" title="Ocultar esta ruta">Ocultar</button><button type="button" class="btn-ic mal" data-w data-eliminar="' + esc(kAv) + '" title="Eliminar los datos de esta ruta">Eliminar</button></td></tr>';
     if (abierta) {
       html += '<tr class="detalle-fila"><td colspan="18"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
-        (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + fmtHl(r.volumenRechazado) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>'; }).join('') +
+        (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + celdaRech(r) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>'; }).join('') +
         '</tbody></table></div></td></tr>';
     }
   });
@@ -3653,14 +3673,14 @@ function alfa(c, a) { c = String(c || ''); return /^#[0-9a-f]{6}$/i.test(c) ? c 
 function filasDash() {
   construirUnificado();
   var est = {}, emp = {};
-  (_uniTodo || []).forEach(function (r) { est[r.codigo + '||' + r.fecha] = r.estado; if (r.empresa) emp[r.ruta] = emp[r.ruta] || r.empresa; });
+  (_uniTodo || []).forEach(function (r) { est[r.codigo + '||' + r.fecha] = r; if (r.empresa) emp[r.ruta] = emp[r.ruta] || r.empresa; });
   var sel = {}; fechasDashSel().forEach(function (f) { sel[f] = 1; });
   var er = state.cfg.empresaRuta || {}, he = state.hlEmp || {};
   return (state.hl || []).filter(function (h) { return sel[h.fecha]; }).map(function (h) {
-    var e = est[h.codigo + '||' + h.fecha] || '';
+    var u = est[h.codigo + '||' + h.fecha], e = u ? u.estado : '';
     var cat = e === 'Entregado' ? 'ent' : (e === 'Parcial' ? 'par' : (e === 'Rechazado' ? 'rec' : 'pen'));
     return { fecha: h.fecha, ruta: h.ruta, viaje: String(h.viaje || '1'), codigo: h.codigo, cliente: h.cliente, hl: h.hl, cat: cat, estado: e || 'Sin Bees',
-      empresa: er[h.ruta] || he[h.ruta] || emp[h.ruta] || '(Sin empresa)', hlEnt: (cat === 'ent' || cat === 'par') ? h.hl : 0, hlRec: cat === 'rec' ? h.hl : 0 };
+      empresa: er[h.ruta] || he[h.ruta] || emp[h.ruta] || '(Sin empresa)', hlEnt: u ? u.volumenEntregado : 0, hlRec: u ? u.volumenRechazado : 0 };
   });
 }
 function agregarDash(filas, clave) {
@@ -3933,6 +3953,20 @@ function renderDash() {
   $('cntDashRuta').textContent = R.length + ' ruta' + (R.length === 1 ? '' : 's') + '/viaje' + (R.length === 1 ? '' : 's') + (R.length > 600 ? ' (se muestran 600; el Excel trae todas)' : '');
 }
 function seleccionarRango(d, h) { var t = fechasHl().filter(function (f) { return f >= d && f <= h; }); dashSel = t.length ? t : null; renderDash(); }
+function wireHlRech() {
+  document.addEventListener('change', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-hlrech]') : null; if (!el) return;
+    var k = el.getAttribute('data-hlrech'), mx = parseFloat(el.getAttribute('data-max')) || 0, v = parseFloat(String(el.value).replace(',', '.'));
+    state.hlRechMan = state.hlRechMan || {};
+    if (isNaN(v)) delete state.hlRechMan[k]; else state.hlRechMan[k] = Math.min(Math.max(v, 0), mx);
+    invalidar(); guardar(); refrescar(true);
+  });
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-hlrech-reset]') : null; if (!b) return;
+    delete (state.hlRechMan || {})[b.getAttribute('data-hlrech-reset')];
+    invalidar(); guardar(); refrescar(true);
+  });
+}
 function wireDash() {
   ['fdhEmpresa', 'fdhRuta', 'fdhViaje', 'evMetrica', 'evDesglose', 'evVista'].forEach(function (id) { $(id).addEventListener('change', renderDash); });
   $('btnExpDash').addEventListener('click', exportarDash);
@@ -4402,6 +4436,7 @@ function wire() {
   wireDocs();
   wireRecargas();
   wireDash();
+  wireHlRech();
   $('selFecha').addEventListener('change', function (e) { fechaSel = e.target.value; refrescar(true); });
   ['fsEmpresa', 'fsSem', 'fsOrden'].forEach(function (id) { $(id).addEventListener('change', renderSif); });
   $('fsTexto').addEventListener('input', renderSif);
@@ -4456,7 +4491,7 @@ function wire() {
       if (!o || !Array.isArray(o.hr) || !Array.isArray(o.rd)) throw new Error('El archivo no es una copia de este programa.');
       var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros de hoja de ruta, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
-      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
+      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {}; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
       state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Copia restaurada.');
     } catch (err) { avisar('No se pudo restaurar: ' + err.message, true); }
@@ -4480,7 +4515,7 @@ function wire() {
   $('btnVaciar').addEventListener('click', function () {
     confirmar('Vaciar todo', 'Se borrarán hoja de ruta, Bees, Ruta SIF, días cerrados y horas planeadas de este navegador. Esta acción no se puede deshacer. ¿Ya descargaste una copia?', 'Vaciar todo').then(function (ok) {
       if (!ok) return;
-      state.hr = []; state.rd = []; state.sic = {}; state.hl = []; state.hlEmp = {}; state.cerrados = []; state.cfg.manual = {}; state.geo = {}; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; _kmlIdx = null; _kmlMemo = {};
+      state.hr = []; state.rd = []; state.sic = {}; state.hl = []; state.hlEmp = {}; state.hlRechMan = {}; state.cerrados = []; state.cfg.manual = {}; state.geo = {}; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; _kmlIdx = null; _kmlMemo = {};
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Todo vaciado.');
     });
   });
@@ -4530,7 +4565,7 @@ async function comprimir(texto) { return aB64(await new Response(new Blob([texto
 async function descomprimirBuf(buf) { return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); }
 async function descomprimir(b64) { return descomprimirBuf(b64aBuf(b64)); }
 function armarPayload() {
-  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], docs: state.docs || {}, recargas: state.recargas || {}, hl: state.hl || [], hlEmp: state.hlEmp || {}, cfg: state.cfg, kml: state.kml });
+  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], docs: state.docs || {}, recargas: state.recargas || {}, hl: state.hl || [], hlEmp: state.hlEmp || {}, hlRechMan: state.hlRechMan || {}, cfg: state.cfg, kml: state.kml });
 }
 function horaCorta(ms) { return new Date(ms).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }); }
 function notaNube(t, mal) { var e = $('estNube'); if (e) { e.textContent = t; e.classList.toggle('mal', !!mal); } }
@@ -4550,7 +4585,7 @@ function urlDatos() { return new URL(gh.ruta.split('/').pop(), location.href.spl
 
 /* --- aplicar al programa lo que llega de la nube --- */
 function aplicarRemoto(o, meta) {
-  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {};
+  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {};
   if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
   state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {});
   state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
@@ -4819,7 +4854,7 @@ async function iniciar() {
   var ok = await DB.abrir();
   var g = await DB.get('estado');
   if (g && g.hr && g.rd) {
-    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.docs = g.docs || {}; state.recargas = g.recargas || {}; state.hl = g.hl || []; state.hlEmp = g.hlEmp || {}; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
+    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.docs = g.docs || {}; state.recargas = g.recargas || {}; state.hl = g.hl || []; state.hlEmp = g.hlEmp || {}; state.hlRechMan = g.hlRechMan || {}; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
     state.cfg = Object.assign(state.cfg, g.cfg || {}); migrarCfg(g.cfg);
     state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
   }
