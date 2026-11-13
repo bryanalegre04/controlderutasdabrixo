@@ -462,6 +462,7 @@ td.c input[type=checkbox]:disabled { cursor: default; }
 .in-hl.manual { border-color: #E08A1E; background: #FFF6E6; font-weight: 600; }
 .in-hl:disabled { border-color: transparent; background: transparent; }
 
+.etq-al{display:inline-block;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-fill);border-radius:999px;padding:1px 9px;font-size:12.5px;font-weight:600;white-space:nowrap}
 /* ===== REFRESCO VISUAL: más vivo, más visible, con animación ===== */
 :root{
   --bg:#EAF0FA; --surface:#FFFFFF; --surface-2:#F3F7FF; --line:#CBD6EA; --line-soft:#DDE6F4;
@@ -621,6 +622,11 @@ th{background:linear-gradient(180deg,var(--surface-2),var(--surface))}
         <div class="src-top"><b>HL de recarga</b><span class="src-sub">hl por cliente (hoja DET)</span></div>
         <div class="src-estado" id="est-hl">Sin datos</div>
         <button class="btn-imp" type="button" data-imp="hl">Importar Excel de recarga</button>
+      </div>
+      <div class="src">
+        <div class="src-top"><b>Alertas de clientes</b><span class="src-sub">modulación (motivo de la alerta)</span></div>
+        <div class="src-estado" id="est-alertas">Sin datos</div>
+        <button class="btn-imp" type="button" data-imp="alertas">Importar alertas</button>
       </div>
       <div class="src">
         <div class="src-top"><b>Mapas KML</b><span class="src-sub">ubicación de los clientes</span></div>
@@ -1192,6 +1198,7 @@ var state = {
   sic: {},           // SIC por fecha: { 'AAAA-MM-DD': { run, filas:[...] } }
   cerrados: [],      // días cerrados (no se tocan al importar)
   hl: [],            // HL por cliente (Excel de recarga/carga): {fecha, ruta, viaje, codigo, cliente, hl, hlBeer, hlNabs, cajas, placa}
+  alertas: {},       // alertas de clientes (modulación): fecha||codigo -> {motivo, retro, hora, usuario}
   hlRechMan: {},     // HL rechazado corregido a mano por cliente: 'fecha||codigo' -> hl
   hlEmp: {},         // empresa por ruta, tomada de la hoja CARGA del Excel de recarga
   recargas: {},      // control manual de recargas (viaje 2 y 3): 'AAAA-MM-DD||ruta||viaje' -> {est, obs}
@@ -1470,6 +1477,33 @@ function extraerHl(filas) {
   }
   var out = orden.map(function (k) { return acc[k]; });
   out.forEach(function (a) { a.hl = Math.round(a.hl * 1e5) / 1e5; });
+  return out.length ? out : null;
+}
+
+/* ---------- ALERTAS DE CLIENTES (Excel de modulación) ---------- */
+var ALIAS_AL = { fecha: ['FECHA'], codigo: ['CODIGO', 'IDCLIENTE'], ruta: ['RUTA'], viaje: ['VIAJE'], cliente: ['CLIENTE'], alerta: ['ALERTA'],
+  mr: ['MR', 'TIPOALERTA'], sub: ['SUBCATEGORIA'], retro: ['RETROALIMENTACION'], estado: ['ESTADOENTREGA', 'ESTADOBEES'], hora: ['FECHAHORAALERTA'], usuario: ['USUARIOALERTA', 'MODULADORA'] };
+function extraerAlertas(filas) {
+  var enc = detectarEncabezado(filas, ALIAS_AL, ['codigo', 'alerta', 'mr', 'estado'], 15);
+  if (!enc) return null;
+  var cols = Object.keys(enc.mapa).map(Number), out = [];
+  for (var i = enc.idx + 1; i < filas.length; i++) {
+    var fila = filas[i] || [], r = { fecha: '', codigo: '', ruta: '', viaje: '', cliente: '', alerta: '', mr: '', sub: '', retro: '', estado: '', hora: null, usuario: '' };
+    cols.forEach(function (j) {
+      var c = enc.mapa[j], v = fila[j];
+      if (v === '' || v === null || v === undefined) return;
+      if (c === 'fecha') r.fecha = convertirFecha(v);
+      else if (c === 'codigo') r.codigo = normalizarCodigo(v);
+      else if (c === 'viaje') r.viaje = textoNumerico(v);
+      else if (c === 'hora') r.hora = msLima(v);
+      else r[c] = String(v).trim();
+    });
+    if (!r.codigo) continue;
+    if (!r.fecha && r.hora) r.fecha = new Date(r.hora).toISOString().slice(0, 10);   /* sin columna de fecha: la del día de la alerta (se corrige con el nombre del archivo) */
+    if (r.alerta && !/^s[ií]?$/i.test(r.alerta)) continue;
+    if (!r.mr && !r.retro && !r.sub) continue;
+    out.push(r);
+  }
   return out.length ? out : null;
 }
 var ALIAS_HLEMP = { empresa: ['EMPRESA'], ruta: ['RUTA'], placa: ['PLACA'], tour: ['TRANSPORTE'] };
@@ -1761,6 +1795,11 @@ function construirUnificado() {
       estado = 'Desplanificado';   // está en el Roadmap pero no en Bees
       motivo = hr.motivoRechazo || '';
     }
+    // alertas de clientes (modulación): si Bees ya dio un estado (entregado, parcial, rechazado) manda Bees;
+    // si el pedido sigue pendiente (o aún no está en Bees) se deja el motivo de la alerta
+    var al = state.alertas ? state.alertas[fecha + '||' + codigo] : null, alAplica = false;
+    var alBeesDef = al && /^(entregado|modificacion parcial|modificación parcial|rechazado|concluido)/i.test(al.estadoBees || '');   // el propio Excel del plan ya trae el estado de Bees
+    if (al && !alBeesDef && (estado === 'Pendiente' || estado === 'Desplanificado')) { alAplica = true; motivo = al.motivo || motivo; }
     // TODO el hectolitraje sale del Excel de recarga (nunca de Bees): entregado y parcial = HL completo; rechazo total = HL completo
     var rechManual = false;
     if (hlFechas[fecha]) {
@@ -1779,14 +1818,14 @@ function construirUnificado() {
       codigo: codigo, ruta: ruta, cliente: (hr && hr.cliente) || (rd && rd.cliente) || '', vehiculo: vehiculo,
       placaKey: placaClave(vehiculo), direccion: (hr && hr.direccion) || (datosCli[codigo] ? datosCli[codigo].d : ''), ciudad: (hr && hr.ciudad) || (datosCli[codigo] ? datosCli[codigo].c : ''),
       viaje: (hr && hr.viaje) || (hlr && hlr.viaje) || '', empresa: empresa, fecha: fecha,
-      alerta: !!(hr && hr.alerta === 'Sí'), zonaComercial: (hr && hr.zonaComercial) || '', supervisor: (hr && hr.supervisor) || '',
+      alerta: !!(hr && hr.alerta === 'Sí') || alAplica, alertaMotivo: alAplica ? (al.motivo || '') : '', alertaSuperada: !!(al && !alAplica), alertaUsuario: alAplica ? (al.usuario || '') : '', zonaComercial: (hr && hr.zonaComercial) || '', supervisor: (hr && hr.supervisor) || '',
       transporte: (hr && hr.transporte) || (rd && rd.tour) || '',
       volumenProgramado: vp, volumenEntregado: ve, volumenRechazado: vr,
       estado: estado, fuenteVol: fuenteVol, rechManual: rechManual, sinHoja: !!(rd && !hr), conHl: !!hlr, motivoRechazo: motivo, status: rd ? rd.status : '',
       rdIni: rd ? rd.tripStartMs : null, rdUlt: rd ? rd.lastMs : null,
       visita: rd ? rd.visita : null, ordenOrig: rd ? rd.ordenOrig : null, llegadaMs: rd ? rd.llegadaMs : null, finMs: rd ? rd.finMs : null,
       reprog: rd ? (rd.reprog || 0) : 0, motivoReprog: rd ? (rd.motivoReprog || '') : '', dentroRadio: rd ? rd.dentroRadio : '',
-      retro: (hr && hr.retro) || '', fechaAlerta: hr ? hr.fechaAlerta : null, lat: hr && hr.latitud !== null && hr.latitud !== undefined ? hr.latitud : (datosCli[codigo] && datosCli[codigo].lat !== null && datosCli[codigo].lat !== undefined ? datosCli[codigo].lat : null), lon: hr && hr.longitud !== null && hr.longitud !== undefined ? hr.longitud : (datosCli[codigo] && datosCli[codigo].lon !== null && datosCli[codigo].lon !== undefined ? datosCli[codigo].lon : null),
+      retro: alAplica ? (al.retro || (hr && hr.retro) || '') : ((hr && hr.retro) || ''), fechaAlerta: alAplica && al.hora !== null && al.hora !== undefined ? al.hora : (hr ? hr.fechaAlerta : null), lat: hr && hr.latitud !== null && hr.latitud !== undefined ? hr.latitud : (datosCli[codigo] && datosCli[codigo].lat !== null && datosCli[codigo].lat !== undefined ? datosCli[codigo].lat : null), lon: hr && hr.longitud !== null && hr.longitud !== undefined ? hr.longitud : (datosCli[codigo] && datosCli[codigo].lon !== null && datosCli[codigo].lon !== undefined ? datosCli[codigo].lon : null),
       tour: rd ? rd.tour : '', entregaCjs: hr ? hr.entregaCjs : 0,
       unidad: (hr && hr.unidad) || '', cadena: cadenaKkaa((hr && hr.cliente) || (rd && rd.cliente) || '', (hr && hr.unidad) || '')
     };
@@ -2093,21 +2132,22 @@ function parseCsv(texto) {
   return filas;
 }
 
-var HINTS = { sic: ['data', 'sic', 'report', 'detalle'], roadmap: ['roadmap', 'hojadelbees', 'hojaderuta', 'hoja'], bees: ['bees', 'routes'], hl: ['det', 'recarga'], hlemp: ['carga'] };
+var HINTS = { sic: ['data', 'sic', 'report', 'detalle'], roadmap: ['roadmap', 'hojadelbees', 'hojaderuta', 'hoja'], bees: ['bees', 'routes'], hl: ['det', 'recarga'], hlemp: ['carga'], alertas: ['modulacion', 'alerta'] };
 var EXTRAER = {
   sic: function (f) { return extraerSic(f); },
   roadmap: function (f) { var r = extraerRoadmap(f); if (!r.length) r = extraerHojaRuta(f); return r.length ? r : null; },
   bees: function (f) { var r = extraerBees(f); return r.length ? r : null; },
   hl: function (f) { return extraerHl(f); },
-  hlemp: function (f) { return extraerHlEmpresas(f); }
+  hlemp: function (f) { return extraerHlEmpresas(f); },
+  alertas: function (f) { return extraerAlertas(f); }
 };
-var NOM_TIPO = { sic: 'Ruta SIF', roadmap: 'Hoja de ruta', bees: 'Bees', hl: 'Excel de recarga (HL)', hlemp: 'Empresas por ruta' };
+var NOM_TIPO = { sic: 'Ruta SIF', roadmap: 'Hoja de ruta', bees: 'Bees', hl: 'Excel de recarga (HL)', hlemp: 'Empresas por ruta', alertas: 'Alertas de clientes' };
 
 async function leerArchivo(file, tipo) {
   // Devuelve una lista de resultados { tipo, datos }: un libro puede traer varias tablas
   // (por ejemplo el reporte con las hojas Roadmap y Bees) y se leen en una sola pasada.
   var ext = (file.name.split('.').pop() || '').toLowerCase();
-  var orden = [tipo].concat(['roadmap', 'bees', 'sic', 'hl', 'hlemp'].filter(function (t) { return t !== tipo; }));
+  var orden = ['alertas'].concat([tipo, 'roadmap', 'bees', 'sic', 'hl', 'hlemp'].filter(function (t, i, a) { return t !== 'alertas' && a.indexOf(t) === i; }));
   function probar(filas, ya) {
     for (var i = 0; i < orden.length; i++) {
       if (ya && ya[orden[i]]) continue;
@@ -2150,6 +2190,11 @@ async function leerArchivo(file, tipo) {
     var resto = nombres.filter(function (n) { return conPista.indexOf(n) === -1; }).slice(0, 8);
     for (var c = 0; c < resto.length && !lista.length; c++) { await pausa(); leerHojas([resto[c]]); }
   }
+  lista.forEach(function (res) {   // Excel del plan sin columna de fecha: se toma la del nombre del archivo
+    if (res.tipo !== 'alertas') return;
+    var mf = /(\d{4})[-_.](\d{2})[-_.](\d{2})/.exec(file.name);
+    if (mf) res.datos.forEach(function (r) { r.fecha = mf[1] + '-' + mf[2] + '-' + mf[3]; });
+  });
   return lista;
 }
 
@@ -2183,6 +2228,19 @@ async function importarArchivos(files, tipo) {
         fsa.forEach(function (f) { fechasNuevas.push(f); });
         var tot = res.datos.reduce(function (a, r) { return a + r.hl; }, 0);
         resumen.push('HL de recarga: ' + res.datos.length + ' clientes · ' + fmtNum(tot, 1) + ' hl' + (fsa.length ? ' del ' + fsa.map(formatearFecha).join(', ') : ''));
+      } else if (res.tipo === 'alertas') {
+        var fa = {}; res.datos.forEach(function (r) { fa[r.fecha] = 1; });
+        var faa = Object.keys(fa).filter(function (f) { return state.cerrados.indexOf(f) === -1; });
+        state.alertas = state.alertas || {};
+        Object.keys(state.alertas).forEach(function (k) { if (fa[k.split('||')[0]]) delete state.alertas[k]; });
+        var nAl = 0;
+        res.datos.forEach(function (r) {
+          if (faa.indexOf(r.fecha) === -1) return;
+          state.alertas[r.fecha + '||' + r.codigo] = { motivo: (r.mr || r.sub || '').replace(/^NEN-\s*/i, '').trim() || r.retro, mr: r.mr, retro: r.retro, hora: r.hora, usuario: r.usuario, estadoBees: r.estado };
+          nAl++;
+        });
+        faa.forEach(function (f) { fechasNuevas.push(f); });
+        resumen.push('Alertas de clientes: ' + nAl + (faa.length ? ' del ' + faa.map(formatearFecha).join(', ') : ''));
       } else if (res.tipo === 'hlemp') {
         state.hlEmp = Object.assign(state.hlEmp || {}, res.datos);
         resumen.push('Empresas por ruta: ' + Object.keys(res.datos).length + ' rutas');
@@ -2357,6 +2415,7 @@ function renderRail() {
   setEstado('est-roadmap', state.hr.length > 0, state.hr.length + ' registros · ' + new Set(state.hr.map(function (r) { return r.fecha; })).size + ' día(s)');
   var nk = state.kml ? Object.keys(state.kml.codes).length + Object.keys(state.kml.nombres).length + Object.keys(state.kml.rutas || {}).length : 0;
   setEstado('est-kml', nk > 0, state.kml && state.kml.archivos.length ? state.kml.archivos.length + ' archivo(s) · ' + state.kml.archivos.reduce(function (a, x) { return a + x.puntos; }, 0) + ' puntos' : '');
+  setEstado('est-alertas', Object.keys(state.alertas || {}).length > 0, Object.keys(state.alertas || {}).length + ' alertas · ' + new Set(Object.keys(state.alertas || {}).map(function (k) { return k.split('||')[0]; })).size + ' día(s)');
   setEstado('est-hl', (state.hl || []).length > 0, (state.hl || []).length + ' clientes · ' + new Set((state.hl || []).map(function (r) { return r.fecha; })).size + ' día(s)');
   setEstado('est-bees', state.rd.length > 0, state.rd.length + ' registros · ' + new Set(state.rd.map(function (r) { return r.tourDate; })).size + ' día(s)');
 
@@ -2676,7 +2735,7 @@ function renderAvance() {
       '<td class="r num ' + (g.mrVolumen <= METAS.mrVolumen ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrVolumen) + '</td><td class="r num ' + (g.mrPedido <= METAS.mrPedido ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrPedido) + '</td><td class="acc-fila"><button type="button" class="btn-ic" data-w data-ocultar="' + esc(kAv) + '" title="Ocultar esta ruta">Ocultar</button><button type="button" class="btn-ic mal" data-w data-eliminar="' + esc(kAv) + '" title="Eliminar los datos de esta ruta">Eliminar</button></td></tr>';
     if (abierta) {
       html += '<tr class="detalle-fila"><td colspan="18"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
-        (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + celdaRech(r) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>'; }).join('') +
+        (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + celdaRech(r) + '</td><td>' + (r.alertaMotivo ? '<span class="etq-al" title="Alerta del cliente' + (r.retro ? ': ' + esc(r.retro) : '') + '">⚠ ' + esc(r.alertaMotivo) + '</span>' : esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '')) + '</td></tr>'; }).join('') +
         '</tbody></table></div></td></tr>';
     }
   });
@@ -2697,7 +2756,7 @@ function renderClientes(lista) {
   $('tablaCli').innerHTML = '<thead><tr><th>Ruta</th><th>Viaje</th><th>Empresa</th><th>Código</th><th>Cliente</th><th>Placa</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
     (corte.length ? corte.map(function (r) {
       return '<tr><td><span class="cel-ruta">' + esc(r.ruta || '(Sin ruta)') + '</span></td><td class="num">' + esc(r.viaje || '—') + '</td><td>' + esc(nombreEmpresa(r.empresa)) + '</td><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td class="num">' + esc(r.vehiculo) + '</td><td>' + etqEstado(r.estado) +
-        '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + fmtHl(r.volumenRechazado) + '</td><td>' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>';
+        '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + fmtHl(r.volumenRechazado) + '</td><td>' + (r.alertaMotivo ? '<span class="etq-al" title="Alerta del cliente' + (r.retro ? ': ' + esc(r.retro) : '') + '">⚠ ' + esc(r.alertaMotivo) + '</span>' : esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '')) + '</td></tr>';
     }).join('') : '<tr><td colspan="11" class="vacio">No hay clientes con estos filtros.</td></tr>') + '</tbody>';
   $('btnMasCli').hidden = lista.length <= limiteCli;
   $('btnMasCli').onclick = function () { limiteCli += 300; renderClientes(lista); };
@@ -2901,6 +2960,7 @@ function detalleFlags(s) {
   if (r.alerta) o.push('Alerta' + (r.fechaAlerta ? ' ' + hhmm(r.fechaAlerta) : '') + (r.retro ? ': ' + r.retro : ''));
   if (r.reprog > 0 || r.status === 'RESCHEDULED') o.push('Reprogramado' + (r.motivoReprog ? ': ' + r.motivoReprog : ''));
   if (r.estado === 'Rechazado' && r.motivoRechazo) o.push('Rechazo: ' + r.motivoRechazo);
+  if (r.alertaMotivo) o.push('Pendiente por alerta: ' + r.alertaMotivo);
   if (r.estado === 'Parcial') o.push('Entregó ' + fmtHl(r.volumenEntregado) + ' de ' + fmtHl(r.volumenProgramado));
   if (s.orig !== null && s.visita !== null && s.orig !== s.visita) o.push('Orden planificado ' + s.orig + ' → visita ' + s.visita);
   if (r.dentroRadio === 'false') o.push('Fuera del radio del cliente');
@@ -4370,7 +4430,7 @@ function renderRecargas() {
       '<td><input type="text" class="in-doc ancho" data-rec-obs="' + ke + '" value="' + esc(g.obs) + '"' + dis + '></td></tr>';
     if (ab) {
       html += '<tr class="detalle-fila"><td colspan="14"><div class="detalle-in"><p class="txt-mut" style="margin:0 0 8px">Transporte: <b>' + esc(g.tour || '—') + '</b> · Supervisor: <b>' + esc(g.supervisor || '—') + '</b> · Placa: <b>' + esc(g.vehiculo || '—') + '</b></p><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Dirección</th><th>Distrito</th><th>Estado en Bees</th><th class="r">Volumen</th><th class="r">Cajas</th><th>Llegada</th><th>Fin</th><th>Motivo</th></tr></thead><tbody>' +
-        g.lista.map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + esc(r.direccion) + '</td><td>' + esc(r.ciudad) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.hlRoad) + '</td><td class="r num">' + fmtCjs(r.entregaCjs) + '</td><td class="num">' + (r.llegadaMs ? hhmm(r.llegadaMs) : '—') + '</td><td class="num">' + (r.finMs ? hhmm(r.finMs) : '—') + '</td><td class="txt-mut">' + esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '') + '</td></tr>'; }).join('') +
+        g.lista.map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + esc(r.direccion) + '</td><td>' + esc(r.ciudad) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.hlRoad) + '</td><td class="r num">' + fmtCjs(r.entregaCjs) + '</td><td class="num">' + (r.llegadaMs ? hhmm(r.llegadaMs) : '—') + '</td><td class="num">' + (r.finMs ? hhmm(r.finMs) : '—') + '</td><td class="txt-mut">' + (r.alertaMotivo ? '<span class="etq-al" title="Alerta del cliente' + (r.retro ? ': ' + esc(r.retro) : '') + '">⚠ ' + esc(r.alertaMotivo) + '</span>' : esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '')) + '</td></tr>'; }).join('') +
         '</tbody></table></div></td></tr>';
     }
   });
@@ -4603,7 +4663,7 @@ function wire() {
       if (!o || !Array.isArray(o.hr) || !Array.isArray(o.rd)) throw new Error('El archivo no es una copia de este programa.');
       var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros de hoja de ruta, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
-      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {}; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
+      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {}; state.alertas = o.alertas || {}; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
       state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Copia restaurada.');
     } catch (err) { avisar('No se pudo restaurar: ' + err.message, true); }
@@ -4627,7 +4687,7 @@ function wire() {
   $('btnVaciar').addEventListener('click', function () {
     confirmar('Vaciar todo', 'Se borrarán hoja de ruta, Bees, Ruta SIF, días cerrados y horas planeadas de este navegador. Esta acción no se puede deshacer. ¿Ya descargaste una copia?', 'Vaciar todo').then(function (ok) {
       if (!ok) return;
-      state.hr = []; state.rd = []; state.sic = {}; state.hl = []; state.hlEmp = {}; state.hlRechMan = {}; state.cerrados = []; state.cfg.manual = {}; state.geo = {}; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; _kmlIdx = null; _kmlMemo = {};
+      state.hr = []; state.rd = []; state.sic = {}; state.hl = []; state.hlEmp = {}; state.hlRechMan = {}; state.alertas = {}; state.cerrados = []; state.cfg.manual = {}; state.geo = {}; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; _kmlIdx = null; _kmlMemo = {};
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Todo vaciado.');
     });
   });
@@ -4677,7 +4737,7 @@ async function comprimir(texto) { return aB64(await new Response(new Blob([texto
 async function descomprimirBuf(buf) { return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); }
 async function descomprimir(b64) { return descomprimirBuf(b64aBuf(b64)); }
 function armarPayload() {
-  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], docs: state.docs || {}, recargas: state.recargas || {}, hl: state.hl || [], hlEmp: state.hlEmp || {}, hlRechMan: state.hlRechMan || {}, cfg: state.cfg, kml: state.kml });
+  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], docs: state.docs || {}, recargas: state.recargas || {}, hl: state.hl || [], hlEmp: state.hlEmp || {}, hlRechMan: state.hlRechMan || {}, alertas: state.alertas || {}, cfg: state.cfg, kml: state.kml });
 }
 function horaCorta(ms) { return new Date(ms).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }); }
 function notaNube(t, mal) { var e = $('estNube'); if (e) { e.textContent = t; e.classList.toggle('mal', !!mal); } }
@@ -4697,7 +4757,7 @@ function urlDatos() { return new URL(gh.ruta.split('/').pop(), location.href.spl
 
 /* --- aplicar al programa lo que llega de la nube --- */
 function aplicarRemoto(o, meta) {
-  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {};
+  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {}; state.alertas = o.alertas || {};
   if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
   state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {});
   state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
@@ -4966,7 +5026,7 @@ async function iniciar() {
   var ok = await DB.abrir();
   var g = await DB.get('estado');
   if (g && g.hr && g.rd) {
-    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.docs = g.docs || {}; state.recargas = g.recargas || {}; state.hl = g.hl || []; state.hlEmp = g.hlEmp || {}; state.hlRechMan = g.hlRechMan || {}; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {};
+    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.docs = g.docs || {}; state.recargas = g.recargas || {}; state.hl = g.hl || []; state.hlEmp = g.hlEmp || {}; state.hlRechMan = g.hlRechMan || {}; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {}; state.alertas = g.alertas || {};
     state.cfg = Object.assign(state.cfg, g.cfg || {}); migrarCfg(g.cfg);
     state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
   }
