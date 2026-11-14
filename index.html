@@ -636,6 +636,7 @@ th{background:linear-gradient(180deg,var(--surface-2),var(--surface))}
       <input type="file" id="inputKml" accept=".kml,.kmz,.xml,.zip" multiple hidden>
       <input type="file" id="inputArchivo" accept=".xlsx,.xls,.xlsm,.csv,.txt" multiple hidden>
       <p class="nota-rail">Puedes subir varios días: cada importación suma y actualiza solo las fechas que trae el archivo.</p>
+      <p class="nota-rail" id="verBuild" style="opacity:.75">Versión 14-nov · viajes separados (v3)</p>
     </div>
 
     <details data-edit>
@@ -2254,7 +2255,9 @@ async function importarArchivos(files, tipo) {
         var m = combinar(state.hr, res.datos, function (r) { return r.fecha || ''; }, function (r) { return String(r.viaje || '1'); });
         state.hr = m.lista;
         res.datos.forEach(function (r) { if (r.fecha) fechasNuevas.push(r.fecha); });
-        resumen.push('Hoja de ruta' + det + ': ' + m.agregados + ' nuevos, ' + m.actualizados + ' actualizados' + (m.ignorados ? ', ' + m.ignorados + ' ignorados por día cerrado' : ''));
+        var repV = {}; res.datos.forEach(function (r) { var b = r.codigo + '||' + (r.fecha || ''); (repV[b] = repV[b] || {})[String(r.viaje || '1')] = 1; });
+        var nRepV = Object.keys(repV).filter(function (b) { return Object.keys(repV[b]).length > 1; }).length;
+        resumen.push('Hoja de ruta' + det + ': ' + m.agregados + ' nuevos, ' + m.actualizados + ' actualizados' + (m.ignorados ? ', ' + m.ignorados + ' ignorados por día cerrado' : '') + (nRepV ? ' · ' + nRepV + ' cliente(s) en varios viajes (cada viaje por separado)' : ''));
       } else if (res.tipo === 'hl') {
         var fs = {}; res.datos.forEach(function (r) { if (r.fecha) fs[r.fecha] = 1; });
         var fsa = Object.keys(fs).filter(function (f) { return state.cerrados.indexOf(f) === -1; });
