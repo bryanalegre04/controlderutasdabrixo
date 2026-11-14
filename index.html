@@ -1470,7 +1470,7 @@ function extraerHl(filas) {
     });
     if (!r.codigo || !r.ruta) continue;
     if (r.hlTotal === null) r.hlTotal = (r.hlBeer || 0) + (r.hlNabs || 0);
-    var k = r.fecha + '||' + r.codigo;
+    var k = r.fecha + '||' + r.codigo + '||' + (r.viaje || '1');
     var a = acc[k];
     if (!a) { a = acc[k] = { fecha: r.fecha, ruta: r.ruta, viaje: r.viaje || '1', codigo: r.codigo, cliente: r.cliente, placa: r.placa, hl: 0, hlBeer: 0, hlNabs: 0, cajas: 0 }; orden.push(k); }
     a.hl += r.hlTotal; a.hlBeer += r.hlBeer || 0; a.hlNabs += r.hlNabs || 0; a.cajas += r.cajas || 0;
@@ -1711,11 +1711,20 @@ function construirUnificado() {
   if (_cacheUni) return _cacheUni;
   calcularRemapFechas();
   var porHR = {};
+  // clientes que están en la hoja de ruta en VARIOS viajes del mismo día: cada viaje es una fila propia
+  var viajesCli = {};
+  state.hr.forEach(function (r0) {
+    if (!r0.codigo) return;
+    var f0 = (r0.fecha && remapFechasHR[r0.fecha]) ? remapFechasHR[r0.fecha] : (r0.fecha || '');
+    var b0 = r0.codigo + '||' + f0; (viajesCli[b0] = viajesCli[b0] || {})[String(r0.viaje || '1')] = 1;
+  });
+  function esRep(b) { return viajesCli[b] && Object.keys(viajesCli[b]).length > 1; }
   state.hr.forEach(function (r0) {
     if (!r0.codigo) return;
     var r = r0;
     if (r0.fecha && remapFechasHR[r0.fecha]) { r = Object.assign({}, r0, { fecha: remapFechasHR[r0.fecha] }); }
     var k = r.codigo + '||' + (r.fecha || '');
+    if (esRep(k)) k += '||v' + String(r.viaje || '1');
     if (!porHR[k]) porHR[k] = Object.assign({}, r);
     else {
       porHR[k].hlProgramado = (porHR[k].hlProgramado || 0) + (r.hlProgramado || 0);
@@ -1725,7 +1734,9 @@ function construirUnificado() {
     }
   });
   var porRD = {};
-  state.rd.forEach(function (r) { if (r.codigo) porRD[r.codigo + '||' + (r.tourDate || '')] = r; });
+  var listaRD = {};
+  state.rd.forEach(function (r) { if (r.codigo) { var kb = r.codigo + '||' + (r.tourDate || ''); porRD[kb] = r; (listaRD[kb] = listaRD[kb] || []).push(r); } });
+  Object.keys(listaRD).forEach(function (kb) { listaRD[kb].sort(function (a, b) { return ((a.tripStartMs || 0) - (b.tripStartMs || 0)) || ((a.visita || 0) - (b.visita || 0)); }); });
 
   // dirección y distrito del cliente: se toman de cualquier día del Roadmap (la dirección no cambia)
   var datosCli = {};
@@ -1753,13 +1764,26 @@ function construirUnificado() {
   });
 
   var porHL = {}, hlFechas = {};
-  (state.hl || []).forEach(function (h) { porHL[h.codigo + '||' + h.fecha] = h; hlFechas[h.fecha] = 1; });
+  var listaHL = {};
+  (state.hl || []).forEach(function (h) { var kb = h.codigo + '||' + h.fecha; (listaHL[kb] = listaHL[kb] || []).push(h); hlFechas[h.fecha] = 1; });
+  Object.keys(listaHL).forEach(function (kb) {   // si el cliente no se repite en la hoja de ruta, se suman sus viajes de HL en una sola entrada
+    var l = listaHL[kb];
+    if (!esRep(kb)) porHL[kb] = l.length === 1 ? l[0] : Object.assign({}, l[0], { hl: l.reduce(function (a, h) { return a + h.hl; }, 0) });
+  });
   var claves = Object.keys(porHR);
-  Object.keys(porRD).forEach(function (k) { if (!porHR[k]) claves.push(k); });
+  var basesHR = {}; Object.keys(porHR).forEach(function (k) { basesHR[k.split('||').slice(0, 2).join('||')] = 1; });
+  Object.keys(porRD).forEach(function (k) { if (!basesHR[k]) claves.push(k); });
 
   _cacheUni = claves.map(function (clave) {
-    var hr = porHR[clave], rd = porRD[clave], hlr = porHL[clave];
-    var codigo = clave.slice(0, clave.lastIndexOf('||'));
+    var hr = porHR[clave], partes = clave.split('||'), base = partes[0] + '||' + partes[1];
+    var rep = esRep(base) && partes.length > 2, rd, hlr;
+    if (rep) {   // cliente repetido en varios viajes: el viaje N toma el N-ésimo pedido de Bees y su propio HL
+      var vs = Object.keys(viajesCli[base]).sort(function (a, b) { return (+a) - (+b); }), ix = vs.indexOf(String(hr.viaje || '1'));
+      rd = (listaRD[base] || [])[ix];
+      hlr = (listaHL[base] || []).filter(function (h) { return String(h.viaje || '1') === String(hr.viaje || '1'); })[0];
+    } else { rd = porRD[clave]; hlr = porHL[clave]; }
+    var codigo = partes[0];
+    var mk = (hr && hr.fecha || (rd && rd.tourDate) || partes[1]) + '||' + codigo + (rep ? '||v' + String(hr.viaje || '1') : '');
     var fecha = (hr && hr.fecha) || (rd && rd.tourDate) || '';
     var vehiculo = (hr && hr.vehiculo) || (rd && rd.vehiculo) || '';
     var ruta = (hr && hr.ruta) || (hlr && hlr.ruta) || '';
@@ -1798,6 +1822,7 @@ function construirUnificado() {
     // alertas de clientes (modulación): si Bees ya dio un estado (entregado, parcial, rechazado) manda Bees;
     // si el pedido sigue pendiente (o aún no está en Bees) se deja el motivo de la alerta
     var al = state.alertas ? state.alertas[fecha + '||' + codigo] : null, alAplica = false;
+    if (al && rep && al.viaje && String(al.viaje) !== String(hr.viaje || '1')) al = null;   // la alerta es de otro viaje del mismo cliente
     var alBeesDef = al && /^(entregado|modificacion parcial|modificación parcial|rechazado|concluido)/i.test(al.estadoBees || '');   // el propio Excel del plan ya trae el estado de Bees
     if (al && !alBeesDef && (estado === 'Pendiente' || estado === 'Desplanificado')) { alAplica = true; motivo = al.motivo || motivo; }
     // TODO el hectolitraje sale del Excel de recarga (nunca de Bees): entregado y parcial = HL completo; rechazo total = HL completo
@@ -1805,7 +1830,7 @@ function construirUnificado() {
     if (hlFechas[fecha]) {
       vp = hlr ? hlr.hl : 0;
       var atendido = estado === 'Entregado' || estado === 'Parcial' || estado === 'Rechazado';
-      var man = state.hlRechMan ? state.hlRechMan[fecha + '||' + codigo] : undefined;
+      var man = state.hlRechMan ? state.hlRechMan[mk] : undefined;
       if (hlr && man !== undefined) {   // corrección manual del HL rechazado: el resto de lo programado cuenta como entregado
         vr = Math.min(Math.max(+man || 0, 0), vp); ve = atendido ? vp - vr : 0; rechManual = true;
       } else {
@@ -1815,7 +1840,7 @@ function construirUnificado() {
       fuenteVol = hlr ? 'hl' : 'sin-hl';
     } else if (!(hr && !hr.sinHl)) { vp = 0; ve = 0; vr = 0; fuenteVol = 'sin-hl'; }
     return {
-      codigo: codigo, ruta: ruta, cliente: (hr && hr.cliente) || (rd && rd.cliente) || '', vehiculo: vehiculo,
+      mk: mk, codigo: codigo, ruta: ruta, cliente: (hr && hr.cliente) || (rd && rd.cliente) || '', vehiculo: vehiculo,
       placaKey: placaClave(vehiculo), direccion: (hr && hr.direccion) || (datosCli[codigo] ? datosCli[codigo].d : ''), ciudad: (hr && hr.ciudad) || (datosCli[codigo] ? datosCli[codigo].c : ''),
       viaje: (hr && hr.viaje) || (hlr && hlr.viaje) || '', empresa: empresa, fecha: fecha,
       alerta: !!(hr && hr.alerta === 'Sí') || alAplica, alertaMotivo: alAplica ? (al.motivo || '') : '', alertaSuperada: !!(al && !alAplica), alertaUsuario: alAplica ? (al.usuario || '') : '', zonaComercial: (hr && hr.zonaComercial) || '', supervisor: (hr && hr.supervisor) || '',
@@ -2236,7 +2261,7 @@ async function importarArchivos(files, tipo) {
         var nAl = 0;
         res.datos.forEach(function (r) {
           if (faa.indexOf(r.fecha) === -1) return;
-          state.alertas[r.fecha + '||' + r.codigo] = { motivo: (r.mr || r.sub || '').replace(/^NEN-\s*/i, '').trim() || r.retro, mr: r.mr, retro: r.retro, hora: r.hora, usuario: r.usuario, estadoBees: r.estado };
+          state.alertas[r.fecha + '||' + r.codigo] = { motivo: (r.mr || r.sub || '').replace(/^NEN-\s*/i, '').trim() || r.retro, mr: r.mr, retro: r.retro, hora: r.hora, usuario: r.usuario, estadoBees: r.estado, viaje: r.viaje || '' };
           nAl++;
         });
         faa.forEach(function (f) { fechasNuevas.push(f); });
@@ -2353,8 +2378,8 @@ function datosDiaTodos() {
 function celdaRech(r) {
   if (r.fuenteVol !== 'hl') return fmtHl(r.volumenRechazado);
   var dis = (!puedeEditar() || !(r.volumenProgramado > 0)) ? ' disabled' : '';
-  return '<span class="in-hl-w"><input type="number" class="in-hl' + (r.rechManual ? ' manual' : '') + '" step="0.01" min="0" max="' + r.volumenProgramado.toFixed(3) + '" value="' + (+r.volumenRechazado.toFixed(3)) + '" data-hlrech="' + esc(r.fecha + '||' + r.codigo) + '" data-max="' + r.volumenProgramado + '"' + dis + ' title="HL programado: ' + fmtHl(r.volumenProgramado) + (r.rechManual ? ' · corregido a mano' : '') + '"> hl' +
-    (r.rechManual && !dis ? '<button type="button" class="btn-ic" data-hlrech-reset="' + esc(r.fecha + '||' + r.codigo) + '" title="Volver al valor automático">↺</button>' : '') + '</span>';
+  return '<span class="in-hl-w"><input type="number" class="in-hl' + (r.rechManual ? ' manual' : '') + '" step="0.01" min="0" max="' + r.volumenProgramado.toFixed(3) + '" value="' + (+r.volumenRechazado.toFixed(3)) + '" data-hlrech="' + esc(r.mk || (r.fecha + '||' + r.codigo)) + '" data-max="' + r.volumenProgramado + '"' + dis + ' title="HL programado: ' + fmtHl(r.volumenProgramado) + (r.rechManual ? ' · corregido a mano' : '') + '"> hl' +
+    (r.rechManual && !dis ? '<button type="button" class="btn-ic" data-hlrech-reset="' + esc(r.mk || (r.fecha + '||' + r.codigo)) + '" title="Volver al valor automático">↺</button>' : '') + '</span>';
 }
 function ocultarRuta(kAv) {
   state.ocultas = state.ocultas || [];
@@ -3845,11 +3870,11 @@ function alfa(c, a) { c = String(c || ''); return /^#[0-9a-f]{6}$/i.test(c) ? c 
 function filasDash() {
   construirUnificado();
   var est = {}, emp = {};
-  (_uniTodo || []).forEach(function (r) { est[r.codigo + '||' + r.fecha] = r; if (r.empresa) emp[r.ruta] = emp[r.ruta] || r.empresa; });
+  (_uniTodo || []).forEach(function (r) { est[r.codigo + '||' + r.fecha + '||' + String(r.viaje || '1')] = r; if (!est[r.codigo + '||' + r.fecha]) est[r.codigo + '||' + r.fecha] = r; if (r.empresa) emp[r.ruta] = emp[r.ruta] || r.empresa; });
   var sel = {}; fechasDashSel().forEach(function (f) { sel[f] = 1; });
   var er = state.cfg.empresaRuta || {}, he = state.hlEmp || {};
   return (state.hl || []).filter(function (h) { return sel[h.fecha]; }).map(function (h) {
-    var u = est[h.codigo + '||' + h.fecha], e = u ? u.estado : '';
+    var u = est[h.codigo + '||' + h.fecha + '||' + String(h.viaje || '1')] || est[h.codigo + '||' + h.fecha], e = u ? u.estado : '';
     var cat = e === 'Entregado' ? 'ent' : (e === 'Parcial' ? 'par' : (e === 'Rechazado' ? 'rec' : 'pen'));
     return { fecha: h.fecha, ruta: h.ruta, viaje: String(h.viaje || '1'), codigo: h.codigo, cliente: h.cliente, hl: h.hl, cat: cat, estado: e || 'Sin Bees',
       empresa: er[h.ruta] || he[h.ruta] || emp[h.ruta] || '(Sin empresa)', hlEnt: u ? u.volumenEntregado : 0, hlRec: u ? u.volumenRechazado : 0 };
