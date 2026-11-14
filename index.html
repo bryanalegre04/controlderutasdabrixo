@@ -1641,16 +1641,25 @@ function extraerSic(filas) {
 }
 
 /* ---------- mezcla por (código + fecha), respetando días cerrados ---------- */
-function combinar(actual, nuevos, fechaDe) {
-  var res = actual.slice(), idx = {}, agregados = 0, actualizados = 0, ignorados = 0;
-  res.forEach(function (r, i) { idx[r.codigo + '||' + fechaDe(r)] = i; });
+function combinar(actual, nuevos, fechaDe, extra) {
+  // extra(r): parte opcional de la clave (viaje en la hoja de ruta, tour en Bees) para que un cliente repetido en varios viajes no se fusione
+  var ex = extra || function () { return ''; };
+  var res = actual.slice(), idx = {}, agregados = 0, actualizados = 0, ignorados = 0, quitadas = 0;
+  if (extra) {   // al volver a subir un cliente del día, se reemplazan todas sus filas anteriores (por si cambió de viaje)
+    var bases = {}; nuevos.forEach(function (r) { if (state.cerrados.indexOf(fechaDe(r)) === -1) bases[r.codigo + '||' + fechaDe(r)] = 1; });
+    var antes = res.length;
+    res = res.filter(function (r) { return !bases[r.codigo + '||' + fechaDe(r)]; });
+    var quitadas = antes - res.length;
+  }
+  res.forEach(function (r, i) { idx[r.codigo + '||' + fechaDe(r) + '||' + ex(r)] = i; });
   nuevos.forEach(function (r) {
     var f = fechaDe(r);
     if (state.cerrados.indexOf(f) !== -1) { ignorados++; return; }
-    var k = r.codigo + '||' + f;
+    var k = r.codigo + '||' + f + '||' + ex(r);
     if (Object.prototype.hasOwnProperty.call(idx, k)) { res[idx[k]] = r; actualizados++; }
     else { idx[k] = res.length; res.push(r); agregados++; }
   });
+  if (quitadas) { var u = Math.min(quitadas, agregados); actualizados += u; agregados -= u; }
   return { lista: res, agregados: agregados, actualizados: actualizados, ignorados: ignorados };
 }
 
@@ -2242,7 +2251,7 @@ async function importarArchivos(files, tipo) {
           var fdef = fechaSel || (state.rd.length ? state.rd[state.rd.length - 1].tourDate : '') || Object.keys(state.sic).sort().pop() || '';
           if (fdef) { sinF.forEach(function (r) { r.fecha = fdef; }); resumen.push(sinF.length + ' filas de la hoja de ruta no traían fecha: se asignó ' + formatearFecha(fdef)); }
         }
-        var m = combinar(state.hr, res.datos, function (r) { return r.fecha || ''; });
+        var m = combinar(state.hr, res.datos, function (r) { return r.fecha || ''; }, function (r) { return String(r.viaje || '1'); });
         state.hr = m.lista;
         res.datos.forEach(function (r) { if (r.fecha) fechasNuevas.push(r.fecha); });
         resumen.push('Hoja de ruta' + det + ': ' + m.agregados + ' nuevos, ' + m.actualizados + ' actualizados' + (m.ignorados ? ', ' + m.ignorados + ' ignorados por día cerrado' : ''));
@@ -2270,7 +2279,7 @@ async function importarArchivos(files, tipo) {
         state.hlEmp = Object.assign(state.hlEmp || {}, res.datos);
         resumen.push('Empresas por ruta: ' + Object.keys(res.datos).length + ' rutas');
       } else if (res.tipo === 'bees') {
-        var m2 = combinar(state.rd, res.datos, function (r) { return r.tourDate || ''; });
+        var m2 = combinar(state.rd, res.datos, function (r) { return r.tourDate || ''; }, function (r) { return String(r.tour || ''); });
         state.rd = m2.lista;
         res.datos.forEach(function (r) { if (r.tourDate) fechasNuevas.push(r.tourDate); });
         resumen.push('Bees' + det + ': ' + m2.agregados + ' nuevos, ' + m2.actualizados + ' actualizados' + (m2.ignorados ? ', ' + m2.ignorados + ' ignorados por día cerrado' : ''));
