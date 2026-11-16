@@ -463,6 +463,30 @@ td.c input[type=checkbox]:disabled { cursor: default; }
 .in-hl:disabled { border-color: transparent; background: transparent; }
 
 .etq-al{display:inline-block;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-fill);border-radius:999px;padding:1px 9px;font-size:12.5px;font-weight:600;white-space:nowrap}
+
+.etq-pago{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.etq-pago.contado{background:#D5F7E8;color:#0A7A52}.etq-pago.credito{background:#FFF0C7;color:#9A6200}.etq-pago.mixto{background:#E3E8FF;color:#3B4FB8}
+.lnk-fact{background:none;border:0;padding:2px 4px;font:inherit;font-weight:700;color:var(--accent);cursor:pointer;border-radius:6px;white-space:nowrap}
+.lnk-fact:hover{background:var(--accent-soft);text-decoration:underline}
+.caja.fact{width:min(860px,100%);padding:0;gap:0;max-height:calc(100vh - 32px);overflow:hidden;display:flex;flex-direction:column;border-radius:14px}
+.fact-h{background:#0B1220;color:#fff;padding:16px 22px 14px;position:relative}
+.fact-x{position:absolute;right:14px;top:12px;width:34px;height:34px;border-radius:8px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px;cursor:pointer}
+.fact-cod{color:#F5B301;font-size:30px;font-weight:800;letter-spacing:.01em;line-height:1.1}
+.fact-nom{font-size:20px;font-weight:700;text-transform:uppercase;margin:4px 0 8px;padding-right:40px}
+.fact-sub{font-size:14px;color:#C9D3E3;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.fact-tot{color:#F5B301;font-size:16px}
+.fact-chk{display:flex;gap:8px;align-items:center;padding:12px 22px;font-size:14px;border-bottom:1px solid var(--line);background:var(--surface-2);cursor:pointer}
+.fact-cuerpo{overflow:auto;flex:1;min-height:120px}
+.fact-t{width:100%;border-collapse:collapse;font-size:14px}
+.fact-t th{position:sticky;top:0;background:var(--surface);text-align:left;font-size:12.5px;color:var(--ink-3);padding:10px 14px;border-bottom:1px solid var(--line);z-index:1}
+.fact-t td{padding:9px 14px;border-bottom:1px solid var(--line-soft)}
+.fact-t th.r,.fact-t td.r{text-align:right}
+.fact-ped td{background:#FFF3D6;color:#7A5200;border-bottom:1px solid #F0D9A0}
+.fact-ref{color:var(--ink-3);font-size:12.5px;margin:0 6px}
+.fact-id{color:var(--ink-3);font-size:12px;margin-left:4px}
+.fact-pie{display:flex;gap:26px;align-items:flex-end;padding:14px 22px;border-top:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+.fact-pie div{display:flex;flex-direction:column}.fact-pie b{font-size:22px;line-height:1.1}.fact-pie span{font-size:11.5px;color:var(--ink-3);letter-spacing:.04em}
+.fact-pie .fact-imp{margin-left:auto;text-align:right}.fact-pie .fact-imp b{color:#B87A00}
 /* ===== REFRESCO VISUAL: más vivo, más visible, con animación ===== */
 :root{
   --bg:#EAF0FA; --surface:#FFFFFF; --surface-2:#F3F7FF; --line:#CBD6EA; --line-soft:#DDE6F4;
@@ -629,6 +653,11 @@ th{background:linear-gradient(180deg,var(--surface-2),var(--surface))}
         <button class="btn-imp" type="button" data-imp="alertas">Importar alertas</button>
       </div>
       <div class="src">
+        <div class="src-top"><b>Productos y precios</b><span class="src-sub">valor de la factura por cliente</span></div>
+        <div class="src-estado" id="est-prod">Sin datos</div>
+        <button class="btn-imp" type="button" data-imp="prod">Importar productos y precios</button>
+      </div>
+      <div class="src">
         <div class="src-top"><b>Mapas KML</b><span class="src-sub">ubicación de los clientes</span></div>
         <div class="src-estado" id="est-kml">Sin datos</div>
         <button class="btn-imp" type="button" data-imp="kml">Importar mapas KML / KMZ</button>
@@ -636,7 +665,7 @@ th{background:linear-gradient(180deg,var(--surface-2),var(--surface))}
       <input type="file" id="inputKml" accept=".kml,.kmz,.xml,.zip" multiple hidden>
       <input type="file" id="inputArchivo" accept=".xlsx,.xls,.xlsm,.csv,.txt" multiple hidden>
       <p class="nota-rail">Puedes subir varios días: cada importación suma y actualiza solo las fechas que trae el archivo.</p>
-      <p class="nota-rail" id="verBuild" style="opacity:.75">Versión 16-nov · razón social (v4)</p>
+      <p class="nota-rail" id="verBuild" style="opacity:.75">Versión 16-nov · productos y precios (v6)</p>
     </div>
 
     <details data-edit>
@@ -1199,6 +1228,7 @@ var state = {
   sic: {},           // SIC por fecha: { 'AAAA-MM-DD': { run, filas:[...] } }
   cerrados: [],      // días cerrados (no se tocan al importar)
   hl: [],            // HL por cliente (Excel de recarga/carga): {fecha, ruta, viaje, codigo, cliente, hl, hlBeer, hlNabs, cajas, placa}
+  prod: {},          // productos y precios por cliente (Excel de productos): fecha||codigo||viaje -> {en, ru, ce, pe:[[pedido, ref, pago, [líneas]]]}
   alertas: {},       // alertas de clientes (modulación): fecha||codigo -> {motivo, retro, hora, usuario}
   hlRechMan: {},     // HL rechazado corregido a mano por cliente: 'fecha||codigo' -> hl
   hlEmp: {},         // empresa por ruta, tomada de la hoja CARGA del Excel de recarga
@@ -1507,6 +1537,56 @@ function extraerAlertas(filas) {
   }
   return out.length ? out : null;
 }
+
+/* ---------- PRODUCTOS Y PRECIOS (Excel de entregas: una fila por material) ---------- */
+var ALIAS_PROD = { fecha: ['FECHAPLA'], ruta: ['RUTA'], viaje: ['VIAJE'], centro: ['CENTRO'], codigo: ['IDCLI'], cliente: ['CLIENTE'],
+  entrega: ['ENTREGA'], pedido: ['PEDIDO'], ref: ['NROPEDIDO'], idmat: ['IDMAT'], tpos: ['TPOS'], material: ['MATERIAL'], um: ['UM'],
+  cant: ['CANTENT'], factor: ['FACTOR'], pagar: ['PAGAR'], cond: ['CONDPAGO'], act: ['ACTIVIDAD'] };
+function litrosMaterial(m) {
+  m = String(m || '');
+  var x = /(\d+(?:[.,]\d+)?)\s*ML/i.exec(m);
+  if (x) return parseFloat(x[1].replace(',', '.')) / 1000;
+  x = /(\d+(?:[.,]\d+)?)\s*(?:LTS?|L)\b/i.exec(m);
+  if (x) return parseFloat(x[1].replace(',', '.'));
+  x = /\b([2-9]\d\d)\b/.exec(m);   // «PILSEN CALLAO LATA 473 6X1»: mililitros sin la sigla
+  return x ? parseInt(x[1], 10) / 1000 : 0;
+}
+function hlProducto(mat, um, cant, factor) {
+  var l = litrosMaterial(mat); if (!l) return 0;
+  var u = (um === 'CA' || um === 'PQ') ? cant * (factor || 1) : cant;
+  return u * l / 100;
+}
+function textoPago(c) {
+  c = String(c || '').trim();
+  if (/contado/i.test(c)) return 'Contado';
+  var d = /(\d+)\s*d[ií]as/i.exec(c);
+  return d ? 'Crédito ' + d[1] + ' días' : (c ? 'Crédito' : '');
+}
+function esRetornoEnvase(l) {   // l = [tpos, idmat, mat, um, cant, hl, imp, act]
+  return /DEV/i.test(l[7] || '') || ['YD16', 'YREN', 'YPNN'].indexOf(l[0]) !== -1 || /^(ENVASE|CASCO|CAJ[AÓ]N VAC|BOTELLA VAC)/i.test(l[2] || '');
+}
+function extraerProductos(filas) {
+  var enc = detectarEncabezado(filas, ALIAS_PROD, ['codigo', 'material', 'pedido', 'pagar', 'cant'], 15);
+  if (!enc) return null;
+  var cols = Object.keys(enc.mapa).map(Number), out = [];
+  for (var i = enc.idx + 1; i < filas.length; i++) {
+    var fila = filas[i] || [], r = { fecha: '', ruta: '', viaje: '', centro: '', codigo: '', cliente: '', entrega: '', pedido: '', ref: '', idmat: '', tpos: '', material: '', um: '', cant: 0, factor: 1, pagar: 0, cond: '', act: '' };
+    cols.forEach(function (j) {
+      var c = enc.mapa[j], v = fila[j];
+      if (v === '' || v === null || v === undefined) return;
+      var k = enc.mapa[j];
+      if (r[k] !== '' && r[k] !== 0 && r[k] !== 1) return;   // si el nombre de la columna se repite, vale la primera
+      if (c === 'fecha') r.fecha = convertirFecha(v);
+      else if (c === 'codigo') r.codigo = normalizarCodigo(v);
+      else if (c === 'cant' || c === 'factor' || c === 'pagar') r[c] = convertirNumero(v) || (c === 'factor' ? 1 : 0);
+      else if (c === 'viaje') r.viaje = textoNumerico(v);
+      else r[c] = String(v).trim();
+    });
+    if (!r.codigo || !r.fecha || !r.material) continue;
+    out.push(r);
+  }
+  return out.length ? out : null;
+}
 var ALIAS_HLEMP = { empresa: ['EMPRESA'], ruta: ['RUTA'], placa: ['PLACA'], tour: ['TRANSPORTE'] };
 function extraerHlEmpresas(filas) {
   var enc = detectarEncabezado(filas, ALIAS_HLEMP, ['empresa', 'ruta', 'placa', 'tour'], 80);
@@ -1798,6 +1878,14 @@ function construirUnificado() {
     var codigo = partes[0];
     var mk = (hr && hr.fecha || (rd && rd.tourDate) || partes[1]) + '||' + codigo + (rep ? '||v' + String(hr.viaje || '1') : '');
     var fecha = (hr && hr.fecha) || (rd && rd.tourDate) || '';
+    var pk = fecha + '||' + codigo + '||' + String((hr && hr.viaje) || '1'), fTot = null, fPago = '';
+    var ep = state.prod ? (state.prod[pk] || (!rep ? state.prod[fecha + '||' + codigo + '||1'] : null)) : null;
+    if (ep) {
+      fTot = 0; var pg = {};
+      ep.pe.forEach(function (p) { pg[p[2]] = 1; p[3].forEach(function (l) { if (!esRetornoEnvase(l)) fTot += l[6]; }); });
+      var pgs = Object.keys(pg); fPago = pgs.length === 1 ? pgs[0] : (pgs.length ? 'Mixto' : '');
+      fTot = Math.round(fTot * 100) / 100;
+    }
     var vehiculo = (hr && hr.vehiculo) || (rd && rd.vehiculo) || '';
     var ruta = (hr && hr.ruta) || (hlr && hlr.ruta) || '';
     if (!ruta && vehiculo) ruta = rutaPorPlaca[fecha + '||' + placaClave(vehiculo)] || rutaPorPlacaUlt[placaClave(vehiculo)] || '';
@@ -1853,7 +1941,7 @@ function construirUnificado() {
       fuenteVol = hlr ? 'hl' : 'sin-hl';
     } else if (!(hr && !hr.sinHl)) { vp = 0; ve = 0; vr = 0; fuenteVol = 'sin-hl'; }
     return {
-      mk: mk, codigo: codigo, ruta: ruta, cliente: (rd && rd.cliente) || (razonBees[codigo] && razonBees[codigo][1]) || (hr && hr.cliente) || '', clienteHR: (hr && hr.cliente) || '', vehiculo: vehiculo,
+      pk: pk, factTot: fTot, pagoTxt: fPago, mk: mk, codigo: codigo, ruta: ruta, cliente: (rd && rd.cliente) || (razonBees[codigo] && razonBees[codigo][1]) || (hr && hr.cliente) || '', clienteHR: (hr && hr.cliente) || '', vehiculo: vehiculo,
       placaKey: placaClave(vehiculo), direccion: (hr && hr.direccion) || (datosCli[codigo] ? datosCli[codigo].d : ''), ciudad: (hr && hr.ciudad) || (datosCli[codigo] ? datosCli[codigo].c : ''),
       viaje: (hr && hr.viaje) || (hlr && hlr.viaje) || '', empresa: empresa, fecha: fecha,
       alerta: !!(hr && hr.alerta === 'Sí') || alAplica, alertaMotivo: alAplica ? (al.motivo || '') : '', alertaSuperada: !!(al && !alAplica), alertaUsuario: alAplica ? (al.usuario || '') : '', zonaComercial: (hr && hr.zonaComercial) || '', supervisor: (hr && hr.supervisor) || '',
@@ -2170,22 +2258,23 @@ function parseCsv(texto) {
   return filas;
 }
 
-var HINTS = { sic: ['data', 'sic', 'report', 'detalle'], roadmap: ['roadmap', 'hojadelbees', 'hojaderuta', 'hoja'], bees: ['bees', 'routes'], hl: ['det', 'recarga'], hlemp: ['carga'], alertas: ['modulacion', 'alerta'] };
+var HINTS = { sic: ['data', 'sic', 'report', 'detalle'], roadmap: ['roadmap', 'hojadelbees', 'hojaderuta', 'hoja'], bees: ['bees', 'routes'], hl: ['det', 'recarga'], hlemp: ['carga'], alertas: ['modulacion', 'alerta'], prod: ['producto', 'precio', 'hoja', 'entrega'] };
 var EXTRAER = {
   sic: function (f) { return extraerSic(f); },
   roadmap: function (f) { var r = extraerRoadmap(f); if (!r.length) r = extraerHojaRuta(f); return r.length ? r : null; },
   bees: function (f) { var r = extraerBees(f); return r.length ? r : null; },
   hl: function (f) { return extraerHl(f); },
   hlemp: function (f) { return extraerHlEmpresas(f); },
-  alertas: function (f) { return extraerAlertas(f); }
+  alertas: function (f) { return extraerAlertas(f); },
+  prod: function (f) { return extraerProductos(f); }
 };
-var NOM_TIPO = { sic: 'Ruta SIF', roadmap: 'Hoja de ruta', bees: 'Bees', hl: 'Excel de recarga (HL)', hlemp: 'Empresas por ruta', alertas: 'Alertas de clientes' };
+var NOM_TIPO = { sic: 'Ruta SIF', roadmap: 'Hoja de ruta', bees: 'Bees', hl: 'Excel de recarga (HL)', hlemp: 'Empresas por ruta', alertas: 'Alertas de clientes', prod: 'Productos y precios' };
 
 async function leerArchivo(file, tipo) {
   // Devuelve una lista de resultados { tipo, datos }: un libro puede traer varias tablas
   // (por ejemplo el reporte con las hojas Roadmap y Bees) y se leen en una sola pasada.
   var ext = (file.name.split('.').pop() || '').toLowerCase();
-  var orden = ['alertas'].concat([tipo, 'roadmap', 'bees', 'sic', 'hl', 'hlemp'].filter(function (t, i, a) { return t !== 'alertas' && a.indexOf(t) === i; }));
+  var orden = ['alertas', 'prod'].concat([tipo, 'roadmap', 'bees', 'sic', 'hl', 'hlemp'].filter(function (t, i, a) { return t !== 'alertas' && t !== 'prod' && a.indexOf(t) === i; }));
   function probar(filas, ya) {
     for (var i = 0; i < orden.length; i++) {
       if (ya && ya[orden[i]]) continue;
@@ -2268,6 +2357,24 @@ async function importarArchivos(files, tipo) {
         fsa.forEach(function (f) { fechasNuevas.push(f); });
         var tot = res.datos.reduce(function (a, r) { return a + r.hl; }, 0);
         resumen.push('HL de recarga: ' + res.datos.length + ' clientes · ' + fmtNum(tot, 1) + ' hl' + (fsa.length ? ' del ' + fsa.map(formatearFecha).join(', ') : ''));
+      } else if (res.tipo === 'prod') {
+        var fp = {}; res.datos.forEach(function (r) { fp[r.fecha] = 1; });
+        var fpa = Object.keys(fp).filter(function (f) { return state.cerrados.indexOf(f) === -1; });
+        state.prod = state.prod || {};
+        Object.keys(state.prod).forEach(function (k) { if (fp[k.split('||')[0]]) delete state.prod[k]; });
+        var nCli = 0, nLin = 0, totImp = 0;
+        res.datos.forEach(function (r) {
+          if (fpa.indexOf(r.fecha) === -1) return;
+          var k = r.fecha + '||' + r.codigo + '||' + (r.viaje || '1'), e = state.prod[k];
+          if (!e) { e = state.prod[k] = { en: r.entrega, ru: r.ruta, ce: r.centro, pe: [] }; nCli++; }
+          var p = null; for (var q = 0; q < e.pe.length; q++) if (e.pe[q][0] === r.pedido) { p = e.pe[q]; break; }
+          if (!p) { p = [r.pedido, r.ref, textoPago(r.cond), [], r.entrega]; e.pe.push(p); }
+          var hl = Math.round(hlProducto(r.material, r.um, r.cant, r.factor) * 10000) / 10000, imp = Math.round(r.pagar * 100) / 100;
+          p[3].push([r.tpos, r.idmat, r.material, r.um, r.cant, hl, imp, r.act]);
+          nLin++; if (!esRetornoEnvase(p[3][p[3].length - 1])) totImp += imp;
+        });
+        fpa.forEach(function (f) { fechasNuevas.push(f); });
+        resumen.push('Productos y precios: ' + nLin + ' líneas de ' + nCli + ' clientes · S/ ' + fmtNum(totImp, 2) + (fpa.length ? ' del ' + fpa.map(formatearFecha).join(', ') : ''));
       } else if (res.tipo === 'alertas') {
         var fa = {}; res.datos.forEach(function (r) { fa[r.fecha] = 1; });
         var faa = Object.keys(fa).filter(function (f) { return state.cerrados.indexOf(f) === -1; });
@@ -2455,6 +2562,7 @@ function renderRail() {
   setEstado('est-roadmap', state.hr.length > 0, state.hr.length + ' registros · ' + new Set(state.hr.map(function (r) { return r.fecha; })).size + ' día(s)');
   var nk = state.kml ? Object.keys(state.kml.codes).length + Object.keys(state.kml.nombres).length + Object.keys(state.kml.rutas || {}).length : 0;
   setEstado('est-kml', nk > 0, state.kml && state.kml.archivos.length ? state.kml.archivos.length + ' archivo(s) · ' + state.kml.archivos.reduce(function (a, x) { return a + x.puntos; }, 0) + ' puntos' : '');
+  setEstado('est-prod', Object.keys(state.prod || {}).length > 0, Object.keys(state.prod || {}).length + ' clientes con factura');
   setEstado('est-alertas', Object.keys(state.alertas || {}).length > 0, Object.keys(state.alertas || {}).length + ' alertas · ' + new Set(Object.keys(state.alertas || {}).map(function (k) { return k.split('||')[0]; })).size + ' día(s)');
   setEstado('est-hl', (state.hl || []).length > 0, (state.hl || []).length + ' clientes · ' + new Set((state.hl || []).map(function (r) { return r.fecha; })).size + ' día(s)');
   setEstado('est-bees', state.rd.length > 0, state.rd.length + ' registros · ' + new Set(state.rd.map(function (r) { return r.tourDate; })).size + ' día(s)');
@@ -2712,6 +2820,53 @@ function segHtml(g) {
   return '<div class="seg" title="Entregados ' + g.entregados + ' · Parciales ' + g.parciales + ' · Rechazados ' + g.rechazados + ' · Pendientes ' + g.pendientes + ' · Desplanificados ' + g.desplanificados + '">' +
     '<i class="s-ent" style="width:' + w(g.entregados) + '"></i><i class="s-par" style="width:' + w(g.parciales) + '"></i><i class="s-rec" style="width:' + w(g.rechazados) + '"></i><i class="s-pen" style="width:' + w(g.pendientes) + '"></i><i class="s-des" style="width:' + w(g.desplanificados) + '"></i></div>';
 }
+
+/* ---------- factura por cliente (productos y precios) ---------- */
+function fmtSoles(n) { return 'S/ ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function etqPago(t) {
+  if (!t) return '<span class="txt-mut">—</span>';
+  return '<span class="etq-pago ' + (t === 'Contado' ? 'contado' : (t === 'Mixto' ? 'mixto' : 'credito')) + '">' + esc(t) + '</span>';
+}
+function celdaFactura(r) {
+  if (r.factTot === null || r.factTot === undefined) return '<span class="txt-mut">—</span>';
+  return '<button type="button" class="lnk-fact" data-fact="' + esc(r.pk) + '" title="Ver productos y precios">' + fmtSoles(r.factTot) + '</button>';
+}
+var CENTROS = { BK35: 'CD Cono Norte' };
+function abrirFactura(pk) {
+  var e0 = state.prod && state.prod[pk]; if (!e0) return;
+  var e = Object.assign({}, e0, { pe: e0.pe.slice().sort(function (a, b) { return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0); }) });   // pedidos de menor a mayor, como en el sistema
+  var p = pk.split('||'), fila = (_uniTodo || []).filter(function (r) { return r.pk === pk; })[0] || {};
+  var nombre = fila.cliente || '', pagos = {};
+  e.pe.forEach(function (x) { pagos[x[2]] = 1; });
+  var pgs = Object.keys(pagos), pagoGlobal = pgs.length === 1 ? pgs[0] : 'Mixto';
+  var c = modal('<div class="fact-h"><button class="fact-x" type="button" id="fcX" aria-label="Cerrar">×</button>' +
+    '<div class="fact-cod">' + esc(p[1]) + '</div><div class="fact-nom">' + esc(nombre) + '</div>' +
+    '<div class="fact-sub">Ruta ' + esc(e.ru || fila.ruta || '') + ' · Viaje ' + esc(p[2]) + ' · ' + esc(CENTROS[e.ce] || e.ce || '') + ' · Entrega ' + esc((e.pe[0] && e.pe[0][4]) || e.en || '') +
+    ' ' + etqPago(pagoGlobal) + ' <b class="fact-tot" id="fcTot"></b></div></div>' +
+    '<label class="fact-chk"><input type="checkbox" id="fcSolo" checked> Solo producto — oculta envases y retornos</label>' +
+    '<div class="fact-cuerpo"><table class="fact-t"><thead><tr><th>Pos</th><th>Material</th><th>UM</th><th class="r">Cantidad</th><th class="r">HL</th><th class="r">Importe</th></tr></thead><tbody id="fcBody"></tbody></table></div>' +
+    '<div class="fact-pie" id="fcPie"></div>');
+  c.classList.add('fact');
+  function pintar() {
+    var solo = c.querySelector('#fcSolo').checked, h = '', nPed = 0, nLin = 0, cant = 0, hl = 0, imp = 0;
+    e.pe.forEach(function (ped) {
+      var ls = ped[3].filter(function (l) { return !solo || !esRetornoEnvase(l); });
+      if (!ls.length) return;
+      nPed++;
+      var sub = ls.reduce(function (a, l) { return a + l[6]; }, 0);
+      h += '<tr class="fact-ped"><td colspan="5"><b>Pedido ' + esc(ped[0]) + '</b>' + (ped[1] ? ' <span class="fact-ref">REF ' + esc(ped[1]) + '</span>' : '') + ' ' + etqPago(ped[2]) + '</td><td class="r"><b>' + fmtSoles(sub) + '</b></td></tr>';
+      ls.forEach(function (l, i) {
+        nLin++; cant += l[4]; hl += l[5]; imp += l[6];
+        h += '<tr><td class="txt-mut">' + ((i + 1) * 10) + '</td><td>' + esc(l[2]) + (l[1] ? ' <span class="fact-id">' + esc(l[1]) + '</span>' : '') + '</td><td>' + esc(l[3]) + '</td><td class="r num">' + fmtNum(l[4], 0) + '</td><td class="r num">' + l[5].toFixed(2) + '</td><td class="r num">' + fmtSoles(l[6]) + '</td></tr>';
+      });
+    });
+    c.querySelector('#fcBody').innerHTML = h || '<tr><td colspan="6" class="vacio">Sin líneas para mostrar.</td></tr>';
+    c.querySelector('#fcTot').textContent = fmtSoles(imp);
+    c.querySelector('#fcPie').innerHTML = '<div><b>' + nPed + '</b><span>PEDIDOS</span></div><div><b>' + nLin + '</b><span>LÍNEAS</span></div><div><b>' + fmtNum(cant, 0) + '</b><span>CANTIDAD</span></div><div><b>' + hl.toFixed(2) + '</b><span>HECTOLITROS</span></div><div class="fact-imp"><b>' + fmtSoles(imp) + '</b><span>IMPORTE TOTAL</span></div>';
+  }
+  c.querySelector('#fcSolo').onchange = pintar; c.querySelector('#fcX').onclick = cerrarModal; pintar();
+}
+document.addEventListener('click', function (ev) { var b = ev.target.closest ? ev.target.closest('[data-fact]') : null; if (b) abrirFactura(b.getAttribute('data-fact')); });
 function etqEstado(e) { return '<span class="etq e-' + e + '">' + e + '</span>'; }
 
 function renderAvance() {
@@ -2774,8 +2929,8 @@ function renderAvance() {
       '<td class="r num">' + fmtHl(g.volP) + '</td><td class="r num txt-ok">' + fmtHl(g.volE) + '</td><td class="r num txt-bad">' + fmtHl(g.volRTotal) + '</td>' +
       '<td class="r num ' + (g.mrVolumen <= METAS.mrVolumen ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrVolumen) + '</td><td class="r num ' + (g.mrPedido <= METAS.mrPedido ? 'txt-ok' : 'txt-bad') + '">' + fmtPct(g.mrPedido) + '</td><td class="acc-fila"><button type="button" class="btn-ic" data-w data-ocultar="' + esc(kAv) + '" title="Ocultar esta ruta">Ocultar</button><button type="button" class="btn-ic mal" data-w data-eliminar="' + esc(kAv) + '" title="Eliminar los datos de esta ruta">Eliminar</button></td></tr>';
     if (abierta) {
-      html += '<tr class="detalle-fila"><td colspan="18"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
-        (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + celdaRech(r) + '</td><td>' + (r.alertaMotivo ? '<span class="etq-al" title="Alerta del cliente' + (r.retro ? ': ' + esc(r.retro) : '') + '">⚠ ' + esc(r.alertaMotivo) + '</span>' : esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '')) + '</td></tr>'; }).join('') +
+      html += '<tr class="detalle-fila"><td colspan="18"><div class="detalle-in"><table class="mini-t"><thead><tr><th>Código</th><th>Cliente</th><th>Estado</th><th>Pago</th><th class="r">Factura</th><th class="r">Programado</th><th class="r">Entregado</th><th class="r">Rechazado</th><th>Motivo</th></tr></thead><tbody>' +
+        (clientesPorRuta[kAv] || []).map(function (r) { return '<tr><td class="num">' + esc(r.codigo) + '</td><td>' + esc(r.cliente) + '</td><td>' + etqEstado(r.estado) + '</td><td>' + etqPago(r.pagoTxt) + '</td><td class="r num">' + celdaFactura(r) + '</td><td class="r num">' + fmtHl(r.volumenProgramado) + '</td><td class="r num txt-ok">' + fmtHl(r.volumenEntregado) + '</td><td class="r num txt-bad">' + celdaRech(r) + '</td><td>' + (r.alertaMotivo ? '<span class="etq-al" title="Alerta del cliente' + (r.retro ? ': ' + esc(r.retro) : '') + '">⚠ ' + esc(r.alertaMotivo) + '</span>' : esc(r.motivoRechazo && r.motivoRechazo !== '0' ? r.motivoRechazo : '')) + '</td></tr>'; }).join('') +
         '</tbody></table></div></td></tr>';
     }
   });
@@ -4703,7 +4858,7 @@ function wire() {
       if (!o || !Array.isArray(o.hr) || !Array.isArray(o.rd)) throw new Error('El archivo no es una copia de este programa.');
       var ok = await confirmar('Restaurar copia', 'Se reemplazarán los datos actuales por los de la copia (' + o.hr.length + ' registros de hoja de ruta, ' + o.rd.length + ' Bees).', 'Restaurar');
       if (!ok) return;
-      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {}; state.alertas = o.alertas || {}; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
+      state.hr = o.hr; state.rd = o.rd; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {}; state.alertas = o.alertas || {}; state.prod = o.prod || {}; state.geo = o.geo || state.geo || {}; if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
       state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {}); migrarCfg(o.cfg);
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Copia restaurada.');
     } catch (err) { avisar('No se pudo restaurar: ' + err.message, true); }
@@ -4727,7 +4882,7 @@ function wire() {
   $('btnVaciar').addEventListener('click', function () {
     confirmar('Vaciar todo', 'Se borrarán hoja de ruta, Bees, Ruta SIF, días cerrados y horas planeadas de este navegador. Esta acción no se puede deshacer. ¿Ya descargaste una copia?', 'Vaciar todo').then(function (ok) {
       if (!ok) return;
-      state.hr = []; state.rd = []; state.sic = {}; state.hl = []; state.hlEmp = {}; state.hlRechMan = {}; state.alertas = {}; state.cerrados = []; state.cfg.manual = {}; state.geo = {}; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; _kmlIdx = null; _kmlMemo = {};
+      state.hr = []; state.rd = []; state.sic = {}; state.hl = []; state.hlEmp = {}; state.hlRechMan = {}; state.alertas = {}; state.prod = {}; state.cerrados = []; state.cfg.manual = {}; state.geo = {}; state.kml = { codes: {}, nombres: {}, lineas: [], archivos: [], rutas: {} }; _kmlIdx = null; _kmlMemo = {};
       invalidar(); fechaSel = ''; guardar(); refrescar(true); avisar('Todo vaciado.');
     });
   });
@@ -4763,7 +4918,7 @@ var ACCESO = { salt: 'cGHUFh6kHVdbanglkCjKGw==', iter: 150000, hash: 'weTN+Lcper
 var modoNube = false;
 var nube = { tipo: '', listo: false, db: null, dl: null, usuario: null, ts: 0, n: 0, subiendo: false, pendiente: false, ultimoJson: '', soloLectura: false, bajando: false, cola: null, intentos: 0, timerSondeo: null };
 var gh = { repo: '', rama: 'main', ruta: 'datos.gz', token: '' };
-var sb = { url: '', key: '', aviso: '' };
+var sb = { url: '', key: '', aviso: '', api: '' };   // api: servidor propio (GoDaddy: api.php + MySQL); si está, se usa en lugar de Supabase
 function puedeEditar() { return !modoNube || !!nube.usuario; }
 /* ocultar / eliminar rutas cambia datos de todos: en GitHub solo lo hace quien tiene token */
 function puedeEscribirCompartido() { return !modoNube || (nube.tipo === 'github' ? (!!nube.usuario && !!gh.token) : (nube.tipo === 'supabase' ? !!nube.usuario : !nube.soloLectura)); }
@@ -4777,7 +4932,7 @@ async function comprimir(texto) { return aB64(await new Response(new Blob([texto
 async function descomprimirBuf(buf) { return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text(); }
 async function descomprimir(b64) { return descomprimirBuf(b64aBuf(b64)); }
 function armarPayload() {
-  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], docs: state.docs || {}, recargas: state.recargas || {}, hl: state.hl || [], hlEmp: state.hlEmp || {}, hlRechMan: state.hlRechMan || {}, alertas: state.alertas || {}, cfg: state.cfg, kml: state.kml });
+  return JSON.stringify({ v: 1, hr: state.hr, rd: state.rd, sic: state.sic, cerrados: state.cerrados, ocultas: state.ocultas || [], docs: state.docs || {}, recargas: state.recargas || {}, hl: state.hl || [], hlEmp: state.hlEmp || {}, hlRechMan: state.hlRechMan || {}, alertas: state.alertas || {}, prod: state.prod || {}, cfg: state.cfg, kml: state.kml });
 }
 function horaCorta(ms) { return new Date(ms).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }); }
 function notaNube(t, mal) { var e = $('estNube'); if (e) { e.textContent = t; e.classList.toggle('mal', !!mal); } }
@@ -4797,7 +4952,7 @@ function urlDatos() { return new URL(gh.ruta.split('/').pop(), location.href.spl
 
 /* --- aplicar al programa lo que llega de la nube --- */
 function aplicarRemoto(o, meta) {
-  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {}; state.alertas = o.alertas || {};
+  state.hr = o.hr || []; state.rd = o.rd || []; state.sic = o.sic || {}; state.cerrados = o.cerrados || []; state.ocultas = o.ocultas || []; state.docs = o.docs || {}; state.recargas = o.recargas || {}; state.hl = o.hl || []; state.hlEmp = o.hlEmp || {}; state.hlRechMan = o.hlRechMan || {}; state.alertas = o.alertas || {}; state.prod = o.prod || {};
   if (o.kml && o.kml.codes) { state.kml = o.kml; state.kml.rutas = state.kml.rutas || {}; _kmlIdx = null; _kmlMemo = {}; }
   state.cfg = Object.assign({ umbral: 10.5, tolerancia: 0, amarillo: 9.5, ver: 2, minProy: 25, usarProy: false, manual: {}, empresas: {} }, o.cfg || {});
   state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
@@ -4912,12 +5067,27 @@ async function sbRpc(nombre, cuerpo) {
   if (!r.ok) { var m = j && j.message ? j.message : ('HTTP ' + r.status); throw new Error(/clave/i.test(m) ? 'La contraseña de editor no coincide con la del servidor.' : m); }
   return j;
 }
-async function sbVerificar(clave) { return (await sbRpc('verificar_clave', { p_clave: clave })) === true; }
-async function sbSubir(z, ts, por) { await sbRpc('guardar_datos', { p_clave: nube.clave, p_ts: ts, p_por: por, p_z: z }); }
+async function apiLlamar(accion, cuerpo) {
+  var r = await fetch(sb.api + '?accion=' + accion, cuerpo ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) } : { cache: 'no-store' });
+  var t = await r.text(), j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {}
+  if (!r.ok) throw new Error(j && j.error ? j.error : (r.status === 404 ? 'no se encontró api.php en el hosting' : 'HTTP ' + r.status));
+  if (!j) throw new Error('api.php no respondió JSON (¿PHP activo en el hosting?)');
+  return j;
+}
+async function sbVerificar(clave) { if (sb.api) return (await apiLlamar('verificar', { clave: clave })).ok === true; return (await sbRpc('verificar_clave', { p_clave: clave })) === true; }
+async function sbSubir(z, ts, por) { if (sb.api) { await apiLlamar('guardar', { clave: nube.clave, ts: ts, por: por, z: z }); return; } await sbRpc('guardar_datos', { p_clave: nube.clave, p_ts: ts, p_por: por, p_z: z }); }
 async function sondearSupabase() {
   if (nube.bajando || nube.subiendo) return;
   nube.bajando = true;
   try {
+    if (sb.api) {   // servidor propio (GoDaddy)
+      var mt = (await apiLlamar('meta')).meta;
+      if (!mt) { nube.listo = true; notaNube(puedeEditar() ? 'Aún no hay datos compartidos. Importa los archivos.' : 'Aún no hay datos publicados.'); return; }
+      if (Number(mt.ts) === nube.ts) { nube.listo = true; notaNube('Datos al día · ' + horaCorta(Number(mt.ts)) + (mt.por === 'editor' ? ' · cargados por el editor' : '')); return; }
+      var dz = await apiLlamar('datos');
+      aplicarRemoto(JSON.parse(await descomprimir(dz.z)), { ts: Number(dz.ts), por: dz.por });
+      return;
+    }
     var base = sb.url + '/rest/v1/dabrixo_datos?id=eq.estado&select=';
     var r = await fetch(base + 'ts,por', { headers: sbCab(), cache: 'no-store' });
     if (!r.ok) throw new Error(r.status === 404 ? 'no existe la tabla dabrixo_datos (ejecuta supabase_setup.sql)' : 'HTTP ' + r.status);
@@ -5024,7 +5194,10 @@ async function iniciarNube() {
     modoNube = true;
     try {
       var rc = await fetch(new URL('config.json', location.href.split('#')[0].split('?')[0]).href, { cache: 'no-cache' });
-      if (rc.ok) { var cj = await rc.json(); if (cj && cj.supabaseUrl && cj.supabaseKey) {
+      if (rc.ok) { var cj = await rc.json(); if (cj && cj.apiUrl) {
+        sb.api = new URL(String(cj.apiUrl).trim(), location.href.split('#')[0].split('?')[0]).href; sb.url = sb.api;
+        sb.aviso = 'revisa que api.php esté subido en tu hosting, que PHP esté activo y que config.php tenga los datos de MySQL';
+      } else if (cj && cj.supabaseUrl && cj.supabaseKey) {
         var u = String(cj.supabaseUrl).trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
         if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
         sb.url = u; sb.key = String(cj.supabaseKey).trim();
@@ -5066,7 +5239,7 @@ async function iniciar() {
   var ok = await DB.abrir();
   var g = await DB.get('estado');
   if (g && g.hr && g.rd) {
-    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.docs = g.docs || {}; state.recargas = g.recargas || {}; state.hl = g.hl || []; state.hlEmp = g.hlEmp || {}; state.hlRechMan = g.hlRechMan || {}; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {}; state.alertas = g.alertas || {};
+    state.hr = g.hr; state.rd = g.rd; state.sic = g.sic || {}; state.cerrados = g.cerrados || []; state.ocultas = g.ocultas || []; state.docs = g.docs || {}; state.recargas = g.recargas || {}; state.hl = g.hl || []; state.hlEmp = g.hlEmp || {}; state.hlRechMan = g.hlRechMan || {}; state.geo = g.geo || {}; state.kml = g.kml && g.kml.codes ? g.kml : state.kml; state.kml.rutas = state.kml.rutas || {}; state.alertas = g.alertas || {}; state.prod = g.prod || {};
     state.cfg = Object.assign(state.cfg, g.cfg || {}); migrarCfg(g.cfg);
     state.cfg.manual = state.cfg.manual || {}; state.cfg.empresas = state.cfg.empresas || {};
   }
