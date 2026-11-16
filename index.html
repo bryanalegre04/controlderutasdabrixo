@@ -636,7 +636,7 @@ th{background:linear-gradient(180deg,var(--surface-2),var(--surface))}
       <input type="file" id="inputKml" accept=".kml,.kmz,.xml,.zip" multiple hidden>
       <input type="file" id="inputArchivo" accept=".xlsx,.xls,.xlsm,.csv,.txt" multiple hidden>
       <p class="nota-rail">Puedes subir varios días: cada importación suma y actualiza solo las fechas que trae el archivo.</p>
-      <p class="nota-rail" id="verBuild" style="opacity:.75">Versión 14-nov · viajes separados (v3)</p>
+      <p class="nota-rail" id="verBuild" style="opacity:.75">Versión 16-nov · razón social (v4)</p>
     </div>
 
     <details data-edit>
@@ -1780,6 +1780,9 @@ function construirUnificado() {
     var l = listaHL[kb];
     if (!esRep(kb)) porHL[kb] = l.length === 1 ? l[0] : Object.assign({}, l[0], { hl: l.reduce(function (a, h) { return a + h.hl; }, 0) });
   });
+  // razón social del cliente: la que trae Bees (poc_name); la hoja de ruta trae el nombre del dueño
+  var razonBees = {};
+  state.rd.forEach(function (r) { if (r.codigo && r.cliente && (!razonBees[r.codigo] || (r.tourDate || '') >= razonBees[r.codigo][0])) razonBees[r.codigo] = [r.tourDate || '', r.cliente]; });
   var claves = Object.keys(porHR);
   var basesHR = {}; Object.keys(porHR).forEach(function (k) { basesHR[k.split('||').slice(0, 2).join('||')] = 1; });
   Object.keys(porRD).forEach(function (k) { if (!basesHR[k]) claves.push(k); });
@@ -1850,7 +1853,7 @@ function construirUnificado() {
       fuenteVol = hlr ? 'hl' : 'sin-hl';
     } else if (!(hr && !hr.sinHl)) { vp = 0; ve = 0; vr = 0; fuenteVol = 'sin-hl'; }
     return {
-      mk: mk, codigo: codigo, ruta: ruta, cliente: (hr && hr.cliente) || (rd && rd.cliente) || '', vehiculo: vehiculo,
+      mk: mk, codigo: codigo, ruta: ruta, cliente: (rd && rd.cliente) || (razonBees[codigo] && razonBees[codigo][1]) || (hr && hr.cliente) || '', clienteHR: (hr && hr.cliente) || '', vehiculo: vehiculo,
       placaKey: placaClave(vehiculo), direccion: (hr && hr.direccion) || (datosCli[codigo] ? datosCli[codigo].d : ''), ciudad: (hr && hr.ciudad) || (datosCli[codigo] ? datosCli[codigo].c : ''),
       viaje: (hr && hr.viaje) || (hlr && hlr.viaje) || '', empresa: empresa, fecha: fecha,
       alerta: !!(hr && hr.alerta === 'Sí') || alAplica, alertaMotivo: alAplica ? (al.motivo || '') : '', alertaSuperada: !!(al && !alAplica), alertaUsuario: alAplica ? (al.usuario || '') : '', zonaComercial: (hr && hr.zonaComercial) || '', supervisor: (hr && hr.supervisor) || '',
@@ -1862,7 +1865,7 @@ function construirUnificado() {
       reprog: rd ? (rd.reprog || 0) : 0, motivoReprog: rd ? (rd.motivoReprog || '') : '', dentroRadio: rd ? rd.dentroRadio : '',
       retro: alAplica ? (al.retro || (hr && hr.retro) || '') : ((hr && hr.retro) || ''), fechaAlerta: alAplica && al.hora !== null && al.hora !== undefined ? al.hora : (hr ? hr.fechaAlerta : null), lat: hr && hr.latitud !== null && hr.latitud !== undefined ? hr.latitud : (datosCli[codigo] && datosCli[codigo].lat !== null && datosCli[codigo].lat !== undefined ? datosCli[codigo].lat : null), lon: hr && hr.longitud !== null && hr.longitud !== undefined ? hr.longitud : (datosCli[codigo] && datosCli[codigo].lon !== null && datosCli[codigo].lon !== undefined ? datosCli[codigo].lon : null),
       tour: rd ? rd.tour : '', entregaCjs: hr ? hr.entregaCjs : 0,
-      unidad: (hr && hr.unidad) || '', cadena: cadenaKkaa((hr && hr.cliente) || (rd && rd.cliente) || '', (hr && hr.unidad) || '')
+      unidad: (hr && hr.unidad) || '', cadena: cadenaKkaa([(rd && rd.cliente) || (razonBees[codigo] && razonBees[codigo][1]) || '', (hr && hr.cliente) || ''].join(' '), (hr && hr.unidad) || '')
     };
   });
   // rutas ocultas por el usuario: salen de todas las vistas (se pueden volver a mostrar)
